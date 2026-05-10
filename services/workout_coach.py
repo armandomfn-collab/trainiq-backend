@@ -97,9 +97,39 @@ Parse esse treino em blocos."""
     )
 
     text = response.content[0].text.strip()
+
+    # Remove markdown code blocks se presentes
     if text.startswith("```"):
         text = "\n".join(text.split("\n")[1:-1]).strip()
-    data = json.loads(text)
+
+    # Extrai apenas o objeto JSON (entre o primeiro { e o último })
+    start = text.find("{")
+    end   = text.rfind("}") + 1
+    if start != -1 and end > start:
+        text = text[start:end]
+
+    # Remove trailing commas antes de ] ou } (JSON inválido comum em LLMs)
+    import re as _re
+    text = _re.sub(r",\s*([}\]])", r"\1", text)
+
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as e:
+        # Ultima tentativa: pede pro Claude corrigir
+        fix_response = client.messages.create(
+            model="claude-opus-4-5",
+            max_tokens=200,
+            messages=[{
+                "role": "user",
+                "content": f"Corrija esse JSON invalido e retorne SOMENTE o JSON corrigido, sem explicacao:\n{text[:500]}\nErro: {e}"
+            }]
+        )
+        fix_text = fix_response.content[0].text.strip()
+        fix_start = fix_text.find("{")
+        fix_end   = fix_text.rfind("}") + 1
+        if fix_start != -1:
+            fix_text = fix_text[fix_start:fix_end]
+        data = json.loads(fix_text)  # Se ainda falhar, levanta exceção normalmente
 
     # Converte para dataclasses
     blocks = []
