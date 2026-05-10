@@ -495,23 +495,32 @@ async def chat(req: ChatRequest):
 @app.get("/api/livetrack/workout-preview")
 async def livetrack_workout_preview(date: str | None = None):
     """Busca o treino do TP para a data e retorna blocos estruturados para o coach."""
+    import traceback
     from datetime import date as dt
     target = date or dt.today().isoformat()
-    workouts_raw = await tp_get_workouts(target, target)
+
+    try:
+        workouts_raw = await tp_get_workouts(target, target)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar treinos do TP: {e}\n{traceback.format_exc()}")
+
     workouts = workouts_raw.get("workouts", [])
 
     if not workouts:
         return {"workout": None, "blocks": [], "message": "Nenhum treino encontrado para essa data."}
 
     # Pega o primeiro treino do dia (ou o de corrida se houver)
-    workout = next((w for w in workouts if w.get("sport", "").lower() in ("run", "running", "corrida")), workouts[0])
+    workout = next((w for w in workouts if (w.get("sport") or "").lower() in ("run", "running", "corrida")), workouts[0])
 
-    parsed = parse_workout_into_blocks(
-        title=workout.get("title", "Treino"),
-        description=workout.get("description", ""),
-        duration_planned_h=workout.get("duration_planned") or 1.0,
-        tss_planned=workout.get("tss_planned"),
-    )
+    try:
+        parsed = parse_workout_into_blocks(
+            title=workout.get("title", "Treino"),
+            description=workout.get("description", ""),
+            duration_planned_h=workout.get("duration_planned") or 1.0,
+            tss_planned=workout.get("tss_planned"),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao parsear blocos: {e}\n{traceback.format_exc()}")
 
     blocks_out = [
         {
@@ -525,11 +534,11 @@ async def livetrack_workout_preview(date: str | None = None):
     ]
 
     return {
-        "workout_id":   workout.get("id"),
+        "workout_id":    workout.get("id"),
         "workout_title": parsed["nome"],
-        "abertura":     parsed["abertura"],
-        "total_min":    parsed["total_min"],
-        "blocks":       blocks_out,
+        "abertura":      parsed["abertura"],
+        "total_min":     parsed["total_min"],
+        "blocks":        blocks_out,
     }
 
 
