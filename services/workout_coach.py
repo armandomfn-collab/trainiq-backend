@@ -41,35 +41,47 @@ class BlockState:
 
 # ── Parser ────────────────────────────────────────────────────────────────────
 
-PARSE_PROMPT = """Voce e um coach de triathlon. Analise a descricao desse treino e extraia os blocos estruturados.
-
-Retorne SOMENTE JSON valido:
-{
-  "nome_treino": "string",
-  "blocos": [
-    {
-      "index": 0,
-      "name": "Aquecimento",
-      "duration_min": 10,
-      "target_pace_min": 6.0,
-      "target_pace_max": 7.0,
-      "target_hr_min": 110,
-      "target_hr_max": 135,
-      "zone": "Z1-Z2",
-      "description": "Corrida leve para aquecer",
-      "tip": "Respira fundo, deixa o corpo despertar"
-    }
-  ],
-  "abertura": "string — mensagem de boas-vindas falada pelo coach ao iniciar (max 2 frases, animadora)"
-}
-
+PARSE_SYSTEM = """Voce e um coach de triathlon que analisa treinos e extrai blocos estruturados.
 REGRAS:
 - Se nao houver pace explicito, infira pela zona (Z1=6:30-7:30, Z2=5:45-6:30, Z3=5:10-5:45, Z4=4:40-5:10, Z5=<4:40)
 - Se nao houver zona, infira pelo contexto (aquecimento=Z1-Z2, recuperacao=Z1, tiro=Z4-Z5)
 - HR: Z1<115, Z2=115-135, Z3=135-155, Z4=155-170, Z5>170
-- `tip`: dica pratica de execucao para cada bloco (nao generica)
-- Abertura: entusiasta mas direto. Ex: "Bom dia! Treino de intervalos, 4 blocos. Comecamos com 10 minutos de aquecimento — pace tranquilo, deixa o corpo acordar."
+- tip: dica pratica de execucao para cada bloco (nao generica)
+- Abertura: entusiasta mas direto, max 2 frases
 """
+
+# Tool definition — garante JSON válido via protocol
+PARSE_TOOL = {
+    "name": "estruturar_treino",
+    "description": "Estrutura o treino em blocos com metadados de coaching",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "nome_treino": {"type": "string"},
+            "abertura":    {"type": "string"},
+            "blocos": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "index":           {"type": "integer"},
+                        "name":            {"type": "string"},
+                        "duration_min":    {"type": "number"},
+                        "target_pace_min": {"type": "number"},
+                        "target_pace_max": {"type": "number"},
+                        "target_hr_min":   {"type": "integer"},
+                        "target_hr_max":   {"type": "integer"},
+                        "zone":            {"type": "string"},
+                        "description":     {"type": "string"},
+                        "tip":             {"type": "string"},
+                    },
+                    "required": ["index", "name", "duration_min"],
+                },
+            },
+        },
+        "required": ["nome_treino", "abertura", "blocos"],
+    },
+}
 
 
 def parse_workout_into_blocks(
@@ -78,58 +90,33 @@ def parse_workout_into_blocks(
     duration_planned_h: float,
     tss_planned: Optional[float],
 ) -> dict:
-    """Use Claude to parse a TP workout description into structured blocks."""
+    """Use Claude tool_use to parse a TP workout description into structured blocks."""
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
-    prompt = f"""TREINO: {title}
-DURACAO TOTAL: {round(duration_planned_h * 60)} minutos
-TSS PLANEJADO: {tss_planned or 'N/A'}
-DESCRICAO:
-{description or '(sem descricao detalhada — infira blocos tipicos pelo titulo e duracao)'}
-
-Parse esse treino em blocos."""
+    prompt = (
+        f"TREINO: {title}\n"
+        f"DURACAO TOTAL: {round(duration_planned_h * 60)} minutos\n"
+        f"TSS PLANEJADO: {tss_planned or 'N/A'}\n"
+        f"DESCRICAO:\n{description or '(sem descricao — infira blocos tipicos pelo titulo e duracao)'}\n\n"
+        "Estruture esse treino em blocos usando a ferramenta estruturar_treino."
+    )
 
     response = client.messages.create(
         model="claude-opus-4-5",
-        max_tokens=1500,
-        system=PARSE_PROMPT,
+        max_tokens=2000,
+        system=PARSE_SYSTEM,
+        tools=[PARSE_TOOL],
+        tool_choice={"type": "any"},
         messages=[{"role": "user", "content": prompt}],
     )
 
-    text = response.content[0].text.strip()
-
-    # Remove markdown code blocks se presentes
-    if text.startswith("```"):
-        text = "\n".join(text.split("\n")[1:-1]).strip()
-
-    # Extrai apenas o objeto JSON (entre o primeiro { e o último })
-    start = text.find("{")
-    end   = text.rfind("}") + 1
-    if start != -1 and end > start:
-        text = text[start:end]
-
-    # Remove trailing commas antes de ] ou } (JSON inválido comum em LLMs)
-    import re as _re
-    text = _re.sub(r",\s*([}\]])", r"\1", text)
-
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError as e:
-        # Ultima tentativa: pede pro Claude corrigir
-        fix_response = client.messages.create(
-            model="claude-opus-4-5",
-            max_tokens=200,
-            messages=[{
-                "role": "user",
-                "content": f"Corrija esse JSON invalido e retorne SOMENTE o JSON corrigido, sem explicacao:\n{text[:500]}\nErro: {e}"
-            }]
-        )
-        fix_text = fix_response.content[0].text.strip()
-        fix_start = fix_text.find("{")
-        fix_end   = fix_text.rfind("}") + 1
-        if fix_start != -1:
-            fix_text = fix_text[fix_start:fix_end]
-        data = json.loads(fix_text)  # Se ainda falhar, levanta exceção normalmente
+    # Extrai o input da tool_use — sempre JSON válido garantido pela API
+    for block in response.content:
+        if block.type == "tool_use" and block.name == "estruturar_treino":
+            data = block.input
+            break
+    else:
+        raise ValueError("Claude nao chamou a ferramenta estruturar_treino")
 
     # Converte para dataclasses
     blocks = []
