@@ -22,6 +22,7 @@ from services.push import send_push_notification
 from services.database import (
     init_db, save_device_token,
     save_body_measurement, get_body_measurements, delete_body_measurement,
+    save_chat_message, get_chat_history, clear_chat_history,
 )
 from services.body_analysis import analyze_body_composition
 from services.body_vision import extract_bioimpedance_from_image
@@ -456,12 +457,12 @@ class ChatMessageModel(BaseModel):
     content: str
 
 class ChatRequest(BaseModel):
-    messages: list[ChatMessageModel]
+    message: str  # só a nova mensagem do usuário
 
 
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
-    """Chat com o coach IA com contexto do TrainingPeaks."""
+    """Chat com o coach IA com histórico persistente e contexto do TrainingPeaks."""
     today     = date.today().isoformat()
     week_ago  = (date.today() - timedelta(days=7)).isoformat()
     tomorrow  = (date.today() + timedelta(days=1)).isoformat()
@@ -483,9 +484,31 @@ async def chat(req: ChatRequest):
     except Exception:
         context = {"data_hoje": today}
 
-    messages = [{"role": m.role, "content": m.content} for m in req.messages]
+    # Salva mensagem do usuário
+    save_chat_message("user", req.message)
+
+    # Monta histórico completo para o Claude (últimas 40 msgs)
+    messages = get_chat_history(limit=40)
+
     reply = await chat_with_coach(messages, context)
-    return {"reply": reply}
+
+    # Salva resposta do coach
+    save_chat_message("assistant", reply)
+
+    return {"reply": reply, "history": get_chat_history(limit=40)}
+
+
+@app.get("/api/chat/history")
+async def chat_history():
+    """Retorna o histórico completo do chat."""
+    return {"history": get_chat_history(limit=60)}
+
+
+@app.delete("/api/chat/history")
+async def chat_history_clear():
+    """Limpa o histórico do chat."""
+    clear_chat_history()
+    return {"success": True}
 
 
 # ──────────────────────────────────────────────
