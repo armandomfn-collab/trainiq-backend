@@ -152,10 +152,19 @@ async def check_livetrack_email():
             workouts_raw = await tp_get_workouts(today, today)
             workouts = workouts_raw.get("workouts", [])
             if workouts:
-                parsed = parse_workout_into_blocks(workouts[0])
-                if parsed and parsed.get("blocos"):
+                w = next(
+                    (x for x in workouts if (x.get("sport") or "").lower() in ("run", "running")),
+                    workouts[0]
+                )
+                parsed = parse_workout_into_blocks(
+                    title=w.get("title", "Treino"),
+                    description=w.get("description", ""),
+                    duration_planned_h=w.get("duration_planned") or 1.0,
+                    tss_planned=w.get("tss_planned"),
+                )
+                if parsed and parsed.get("blocks"):
                     coach = WorkoutCoach(parsed)
-                    print(f"[Scheduler] Coach estruturado: {parsed.get('nome_treino')}")
+                    print(f"[Scheduler] Coach estruturado: {parsed.get('nome')}")
         except Exception as e:
             print(f"[Scheduler] Treino do TP nao carregado: {e}")
 
