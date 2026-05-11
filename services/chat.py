@@ -33,9 +33,27 @@ FLUXO PARA ALTERAÇÕES NO TP:
 2. Execute a ação (delete/update/create)
 3. Confirme em 1 frase com o resultado
 
+RACIOCÍNIO TEMPORAL — REGRAS OBRIGATÓRIAS:
+- O contexto sempre inclui "hora_atual" (ex: "21:30"). Use isso.
+- Para avaliar intervalos entre treinos, calcule as horas EXPLICITAMENTE.
+  Ex: corrida às 21h + pedal às 05h = apenas 8h de intervalo → insuficiente para recuperação.
+  Ex: corrida às 21h + pedal às 21h do dia seguinte = 24h → ok.
+- "Amanhã de manhã" significa menor intervalo do que "amanhã à noite".
+  Nunca confunda os dois. Calcule sempre.
+- Treinos próximos (< 12h): sempre mencione o intervalo real em horas.
+- Se o atleta pergunta se consegue fazer treino X e depois Y, responda com:
+  "X às HH:MM + Y às HH:MM = N horas de intervalo — [adequado/insuficiente] porque..."
+
+REGRA CRÍTICA — TREINOS:
+- Os únicos treinos que existem são os listados em "TREINOS DE HOJE" e "TREINOS DE AMANHÃ" no contexto.
+- Se o contexto diz "TREINOS DE HOJE: [Run]", hoje SÓ TEM corrida. Não existe pedal hoje.
+- NUNCA mencione um treino que não esteja explicitamente listado no contexto.
+- Se não tiver certeza do que está agendado, use a ferramenta tp_get_workouts para verificar.
+
 QUANDO O ATLETA PEDIR ANÁLISE OU CONSELHO:
-- Usa os dados do contexto (TSB, HRV, treinos) + metodologia embutida
-- Responde como coach, não como assistente: prescreve, não pergunta"""
+- Usa os dados do contexto (TSB, HRV, treinos, hora_atual) + metodologia embutida
+- Responde como coach, não como assistente: prescreve, não pergunta
+- Nunca dê duas recomendações contraditórias na mesma resposta"""
 
 def _get_system_prompt() -> str:
     """Gera o system prompt completo em runtime (inclui perfil atualizado do DB)."""
@@ -130,13 +148,83 @@ async def _run_tool(name: str, inputs: dict) -> dict:
         return {"error": str(e)}
 
 
+# ─── Formatador de contexto ────────────────────────────────────────────────────
+def _format_context(ctx: dict) -> str:
+    """Formata o contexto do atleta de forma clara e inequívoca para o coach."""
+    lines = []
+
+    data  = ctx.get("data_hoje", "?")
+    hora  = ctx.get("hora_atual", "?")
+    forma = ctx.get("forma", {})
+    metr  = ctx.get("metricas", {})
+
+    lines.append(f"DATA/HORA ATUAL: {data} às {hora}")
+    lines.append("")
+
+    # Treinos de hoje — lista explícita
+    hoje = ctx.get("treinos_hoje", [])
+    if hoje:
+        lines.append("TREINOS DE HOJE (apenas estes — não invente outros):")
+        for w in hoje:
+            sport   = w.get("sport") or "?"
+            title   = w.get("title") or "Treino"
+            dur_min = int((w.get("duration_planned") or 0) * 60)
+            tss     = w.get("tss_planned")
+            done    = bool(w.get("duration_actual") or w.get("tss_actual"))
+            status  = "✓ concluído" if done else "pendente"
+            tss_str = f" | TSS {tss}" if tss else ""
+            lines.append(f"  • [{sport}] {title} — {dur_min}min{tss_str} ({status})")
+    else:
+        lines.append("TREINOS DE HOJE: nenhum treino registrado no TP.")
+    lines.append("")
+
+    # Treinos de amanhã — lista explícita
+    amanha = ctx.get("treinos_amanha", [])
+    if amanha:
+        lines.append("TREINOS DE AMANHÃ (apenas estes — não invente outros):")
+        for w in amanha:
+            sport   = w.get("sport") or "?"
+            title   = w.get("title") or "Treino"
+            dur_min = int((w.get("duration_planned") or 0) * 60)
+            tss     = w.get("tss_planned")
+            tss_str = f" | TSS {tss}" if tss else ""
+            lines.append(f"  • [{sport}] {title} — {dur_min}min{tss_str}")
+    else:
+        lines.append("TREINOS DE AMANHÃ: nenhum treino registrado no TP.")
+    lines.append("")
+
+    # Forma física
+    if forma:
+        ctl = forma.get("ctl") or forma.get("CTL", "?")
+        atl = forma.get("atl") or forma.get("ATL", "?")
+        tsb = forma.get("tsb") or forma.get("TSB", "?")
+        lines.append(f"FORMA: CTL {ctl} | ATL {atl} | TSB {tsb}")
+
+    # Métricas de saúde
+    if metr:
+        hrv    = metr.get("HRV") or metr.get("hrv") or metr.get("HRV Status")
+        bb     = metr.get("Body Battery") or metr.get("body_battery")
+        hr_rep = metr.get("Resting Heart Rate") or metr.get("resting_hr")
+        sono   = metr.get("Sleep") or metr.get("sleep_hours")
+        partes = []
+        if hrv:    partes.append(f"HRV {hrv}")
+        if bb:     partes.append(f"Body Battery {bb}")
+        if hr_rep: partes.append(f"FC repouso {hr_rep}")
+        if sono:   partes.append(f"Sono {sono}h")
+        if partes:
+            lines.append(f"SAÚDE: {' | '.join(partes)}")
+
+    return "\n".join(lines)
+
+
 # ─── Loop agêntico ─────────────────────────────────────────────────────────────
 async def chat_with_coach(messages: list[dict], context: dict | None = None) -> str:
     """Conversa com Claude. Claude pode chamar ferramentas reais do TP."""
 
     system = _get_system_prompt()
     if context:
-        system += f"\n\nCONTEXTO ATUAL DO ATLETA:\n{json.dumps(context, ensure_ascii=False, indent=2)}"
+        ctx_str = _format_context(context)
+        system += f"\n\n════════════════════════════════════════\nCONTEXTO ATUAL DO ATLETA:\n════════════════════════════════════════\n{ctx_str}"
 
     client = _get_client()
     current_messages = list(messages)

@@ -193,6 +193,31 @@ Janelas de treino:
   Manhã (5h-7h): ideal para treinos de qualidade (cortisol natural alto)
   Noite (19h-21h): ok para volume leve, evita alta intensidade (impacta sono)
   Lunch break: natação técnica ou corrida fácil Z1-Z2
+
+
+## 7. SONO — CÁLCULO CORRETO PARA ESSE ATLETA
+
+HORÁRIO DE ACORDAR: ~04h00 (treino começa às 05h, acorda 1h antes para rotina)
+
+CONTA OBRIGATÓRIA para sugerir hora de dormir:
+  Meta de sono × horas → subtrai do horário de acordar (04h00)
+  7h de sono → dormir às 21h00
+  7.5h de sono → dormir às 20h30
+  8h de sono → dormir às 20h00
+
+NUNCA sugira horários como "dormir às 22h-23h" — com acordar às 04h isso
+resulta em apenas 5-6h de sono, o oposto do objetivo.
+
+Quando os dados de sono estiverem disponíveis (Garmin/TP), use:
+  - "Sleep Start" ou "Bedtime" = horário real que dormiu
+  - "Sleep End" ou "Wake Time" = horário real que acordou
+  - "Sleep" ou "Sleep Duration" = duração real em horas
+  Calcule o déficit real: meta 7.5h − duração real = débito de sono.
+
+Recomendação padrão quando não há dados específicos:
+  "Para 7.5h de sono com acordar às 4h: durma até às 20h30."
+  Em dias de treino noturno (ex: treino às 19h-21h): meta mínima é 6.5h
+  → "treino noturno até 21h → durma às 22h → acorda 04h = 6h (limite)"
 """
 
 

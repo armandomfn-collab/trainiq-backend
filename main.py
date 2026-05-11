@@ -48,6 +48,9 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
+    from services.database import DB_PATH
+    print(f"[DB] Banco de dados: {DB_PATH}")
+    print(f"[DB] Existe: {DB_PATH.exists()}")
     init_db()
     start_scheduler()
     print("TrainIQ backend iniciado")
@@ -81,7 +84,17 @@ def _extract_fitness_summary(fitness_data: dict) -> dict:
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "app": "TrainIQ", "version": "0.2.0"}
+    from services.database import DB_PATH
+    import os
+    return {
+        "status": "ok",
+        "app": "TrainIQ",
+        "version": "0.2.0",
+        "db_path": str(DB_PATH),
+        "db_exists": DB_PATH.exists(),
+        "db_size_kb": round(DB_PATH.stat().st_size / 1024, 1) if DB_PATH.exists() else 0,
+        "data_dir_env": os.environ.get("DATA_DIR", "(não definido — usando default)"),
+    }
 
 
 @app.get("/api/dashboard")
@@ -469,6 +482,9 @@ async def chat(req: ChatRequest):
     week_ago  = (date.today() - timedelta(days=7)).isoformat()
     tomorrow  = (date.today() + timedelta(days=1)).isoformat()
 
+    from datetime import datetime as _dt
+    hora_atual = _dt.now().strftime("%H:%M")
+
     try:
         metrics_raw, workouts_raw, fitness_raw, tomorrow_raw = await asyncio.gather(
             tp_get_metrics(week_ago, today),
@@ -478,13 +494,14 @@ async def chat(req: ChatRequest):
         )
         context = {
             "data_hoje": today,
+            "hora_atual": hora_atual,
             "treinos_hoje": workouts_raw.get("workouts", []),
             "treinos_amanha": tomorrow_raw.get("workouts", []),
             "metricas": _extract_metrics_summary(metrics_raw),
             "forma": _extract_fitness_summary(fitness_raw),
         }
     except Exception:
-        context = {"data_hoje": today}
+        context = {"data_hoje": today, "hora_atual": hora_atual}
 
     # Injeta perfil do atleta no contexto (se existir)
     perfil = get_athlete_profile()
