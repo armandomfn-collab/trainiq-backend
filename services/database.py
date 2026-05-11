@@ -62,6 +62,27 @@ def init_db():
                 content TEXT NOT NULL,
                 created_at TEXT DEFAULT (datetime('now'))
             );
+
+            CREATE TABLE IF NOT EXISTS athlete_profile (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                name TEXT,
+                age INTEGER,
+                gender TEXT,
+                height_cm REAL,
+                resting_hr INTEGER,
+                hrv_baseline REAL,
+                sleep_hours_target REAL,
+                ftp_watts INTEGER,
+                threshold_pace_run TEXT,
+                css_swim TEXT,
+                hr_zones TEXT,
+                weekly_schedule TEXT,
+                target_race TEXT,
+                race_date TEXT,
+                race_distance TEXT,
+                notes TEXT,
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
         """)
 
 
@@ -159,3 +180,57 @@ def get_chat_history(limit: int = 40) -> list[dict]:
 def clear_chat_history():
     with get_db() as conn:
         conn.execute("DELETE FROM chat_messages")
+
+
+# ─── Athlete profile ──────────────────────────────────────────────────────────
+
+import json as _json
+
+def save_athlete_profile(data: dict):
+    """Upsert: sempre sobrescreve o único registro (id=1)."""
+    hr_zones       = _json.dumps(data.get("hr_zones") or {}, ensure_ascii=False)
+    weekly_schedule = _json.dumps(data.get("weekly_schedule") or {}, ensure_ascii=False)
+    with get_db() as conn:
+        conn.execute("""
+            INSERT INTO athlete_profile
+              (id, name, age, gender, height_cm,
+               resting_hr, hrv_baseline, sleep_hours_target,
+               ftp_watts, threshold_pace_run, css_swim,
+               hr_zones, weekly_schedule,
+               target_race, race_date, race_distance, notes,
+               updated_at)
+            VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'))
+            ON CONFLICT(id) DO UPDATE SET
+              name=excluded.name, age=excluded.age, gender=excluded.gender,
+              height_cm=excluded.height_cm,
+              resting_hr=excluded.resting_hr, hrv_baseline=excluded.hrv_baseline,
+              sleep_hours_target=excluded.sleep_hours_target,
+              ftp_watts=excluded.ftp_watts,
+              threshold_pace_run=excluded.threshold_pace_run,
+              css_swim=excluded.css_swim,
+              hr_zones=excluded.hr_zones,
+              weekly_schedule=excluded.weekly_schedule,
+              target_race=excluded.target_race,
+              race_date=excluded.race_date,
+              race_distance=excluded.race_distance,
+              notes=excluded.notes,
+              updated_at=datetime('now')
+        """, (
+            data.get("name"), data.get("age"), data.get("gender"), data.get("height_cm"),
+            data.get("resting_hr"), data.get("hrv_baseline"), data.get("sleep_hours_target"),
+            data.get("ftp_watts"), data.get("threshold_pace_run"), data.get("css_swim"),
+            hr_zones, weekly_schedule,
+            data.get("target_race"), data.get("race_date"), data.get("race_distance"),
+            data.get("notes"),
+        ))
+
+
+def get_athlete_profile() -> dict | None:
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM athlete_profile WHERE id = 1").fetchone()
+    if not row:
+        return None
+    d = dict(row)
+    d["hr_zones"]        = _json.loads(d["hr_zones"] or "{}")
+    d["weekly_schedule"] = _json.loads(d["weekly_schedule"] or "{}")
+    return d

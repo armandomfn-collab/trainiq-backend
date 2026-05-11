@@ -23,6 +23,7 @@ from services.database import (
     init_db, save_device_token,
     save_body_measurement, get_body_measurements, delete_body_measurement,
     save_chat_message, get_chat_history, clear_chat_history,
+    save_athlete_profile, get_athlete_profile,
 )
 from services.body_analysis import analyze_body_composition
 from services.body_vision import extract_bioimpedance_from_image
@@ -484,6 +485,11 @@ async def chat(req: ChatRequest):
     except Exception:
         context = {"data_hoje": today}
 
+    # Injeta perfil do atleta no contexto (se existir)
+    perfil = get_athlete_profile()
+    if perfil:
+        context["perfil_atleta"] = perfil
+
     # Salva mensagem do usuário
     save_chat_message("user", req.message)
 
@@ -509,6 +515,41 @@ async def chat_history_clear():
     """Limpa o histórico do chat."""
     clear_chat_history()
     return {"success": True}
+
+
+# ──────────────────────────────────────────────
+# Athlete profile
+# ──────────────────────────────────────────────
+
+class AthleteProfileModel(BaseModel):
+    name: str | None = None
+    age: int | None = None
+    gender: str | None = None
+    height_cm: float | None = None
+    resting_hr: int | None = None
+    hrv_baseline: float | None = None
+    sleep_hours_target: float | None = None
+    ftp_watts: int | None = None
+    threshold_pace_run: str | None = None
+    css_swim: str | None = None
+    hr_zones: dict | None = None
+    weekly_schedule: dict | None = None
+    target_race: str | None = None
+    race_date: str | None = None
+    race_distance: str | None = None
+    notes: str | None = None
+
+
+@app.get("/api/profile")
+def profile_get():
+    p = get_athlete_profile()
+    return {"profile": p or {}}
+
+
+@app.post("/api/profile")
+def profile_save(req: AthleteProfileModel):
+    save_athlete_profile(req.model_dump())
+    return {"success": True, "profile": get_athlete_profile()}
 
 
 # ──────────────────────────────────────────────
