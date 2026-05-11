@@ -70,7 +70,8 @@ def generate_daily_feedback(
 ) -> dict:
     """Generate professional coach-level feedback for the day's workouts."""
     from datetime import datetime
-    hora_atual = datetime.now().strftime("%H:%M")
+    from zoneinfo import ZoneInfo
+    hora_atual = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%H:%M")
 
     completed = [w for w in workout_status if w.get("completed")]
     pending   = [w for w in workout_status if not w.get("completed")]

@@ -178,10 +178,10 @@ async def check_livetrack_email():
 
 def start_scheduler():
     """Inicializa o scheduler com os jobs."""
-    # Análise diária às 6h da manhã
+    # Análise diária às 6h horário de Brasília (UTC-3)
     scheduler.add_job(
         run_daily_analysis,
-        CronTrigger(hour=6, minute=0),
+        CronTrigger(hour=6, minute=0, timezone="America/Sao_Paulo"),
         id="daily_analysis",
         replace_existing=True,
     )

@@ -3,8 +3,15 @@
 import asyncio
 import os
 import sys
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime as _datetime
+from zoneinfo import ZoneInfo
 from typing import Any
+
+BRT = ZoneInfo("America/Sao_Paulo")
+
+def now_brt() -> _datetime:
+    """Retorna o horário atual no fuso de Brasília (UTC-3)."""
+    return _datetime.now(BRT)
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -482,8 +489,7 @@ async def chat(req: ChatRequest):
     week_ago  = (date.today() - timedelta(days=7)).isoformat()
     tomorrow  = (date.today() + timedelta(days=1)).isoformat()
 
-    from datetime import datetime as _dt
-    hora_atual = _dt.now().strftime("%H:%M")
+    hora_atual = now_brt().strftime("%H:%M")
 
     try:
         metrics_raw, workouts_raw, fitness_raw, tomorrow_raw = await asyncio.gather(
