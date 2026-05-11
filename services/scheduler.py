@@ -122,9 +122,11 @@ async def check_completed_workouts():
 
 
 async def check_livetrack_email():
-    """Roda a cada 2min — detecta email do Garmin LiveTrack e inicia monitoramento."""
+    """Roda a cada 2min — detecta email do Garmin LiveTrack e inicia monitoramento com coach do TP."""
     from services.email_watcher import find_latest_livetrack_url
     from services.livetrack import parse_livetrack_url, LiveTrackSession, get_current, set_current
+    from services.workout_coach import parse_workout_into_blocks, WorkoutCoach
+    from tp_mcp.tools.workouts import tp_get_workouts
 
     # Nao inicia novo se ja tem sessao ativa
     current = get_current()
@@ -143,9 +145,24 @@ async def check_livetrack_email():
         if current:
             current.stop()
 
-        session = LiveTrackSession(session_id, token)
+        # Tenta carregar treino de hoje do TP
+        coach = None
+        try:
+            today = date.today().isoformat()
+            workouts_raw = await tp_get_workouts(today, today)
+            workouts = workouts_raw.get("workouts", [])
+            if workouts:
+                parsed = parse_workout_into_blocks(workouts[0])
+                if parsed and parsed.get("blocos"):
+                    coach = WorkoutCoach(parsed)
+                    print(f"[Scheduler] Coach estruturado: {parsed.get('nome_treino')}")
+        except Exception as e:
+            print(f"[Scheduler] Treino do TP nao carregado: {e}")
+
+        session = LiveTrackSession(session_id, token, workout_coach=coach)
         set_current(session)
         session.start()
+        print(f"[Scheduler] Sessao iniciada {'com coach' if coach else 'modo livre'}")
     except Exception as e:
         print(f"[Scheduler] Erro ao iniciar LiveTrack: {e}")
 
