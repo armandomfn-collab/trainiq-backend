@@ -8,8 +8,9 @@ import anthropic
 def _get_client():
     return anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
-SYSTEM_PROMPT = """Você é um coach de esportes de endurance de elite, especializado em triathlon e ciclismo.
-Você analisa dados biométricos e de treinamento de atletas para gerar recomendações personalizadas e precisas.
+from services.coaching_brain import build_system_prompt
+
+_ANALYSIS_ROLE = """Você está gerando a ANÁLISE DIÁRIA — o painel de inteligência do atleta.
 
 Sempre responda em JSON válido com exatamente esta estrutura:
 {
@@ -44,6 +45,8 @@ Sempre responda em JSON válido com exatamente esta estrutura:
     "dicas": ["string", "string"]
   }
 }"""
+
+SYSTEM_PROMPT = build_system_prompt(_ANALYSIS_ROLE)
 
 
 def analyze_athlete_data(

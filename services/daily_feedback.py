@@ -9,7 +9,9 @@ def _get_client():
     return anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
 
-FEEDBACK_PROMPT = """Voce e um coach de triathlon de alto rendimento. Tratas o atleta como profissional — sem papo de motivacao vazia, so analise tecnica real.
+from services.coaching_brain import build_system_prompt
+
+_FEEDBACK_ROLE = """Você está gerando o FEEDBACK DIÁRIO — análise técnica do que aconteceu no dia.
 
 FILOSOFIA:
 - Usa os numeros reais: TSS realizado vs planejado, duracao real vs planejada, zonas de FC, pace
@@ -55,6 +57,8 @@ Responda SOMENTE em JSON valido:
     "preparacao_hoje": "string — 1 acao concreta hoje a noite para amanha"
   }
 }"""
+
+FEEDBACK_PROMPT = build_system_prompt(_FEEDBACK_ROLE)
 
 
 def generate_daily_feedback(

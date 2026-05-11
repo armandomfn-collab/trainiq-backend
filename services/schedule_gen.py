@@ -9,8 +9,10 @@ def _get_client():
     return anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
 
-ADAPT_PROMPT = """Voce e um coach de triathlon e nutricionista esportivo de elite. O atleta definiu a ordem e horario dos treinos do dia.
-Analise a sequencia escolhida e gere recomendacoes especificas para cada bloco com foco especial em nutricao periodizada.
+from services.coaching_brain import build_system_prompt
+
+_SCHEDULE_ROLE = """Você está gerando o PLANO DIÁRIO — o atleta definiu a ordem dos treinos e você analisa e recomenda.
+Foco especial em nutrição periodizada e gestão de carga entre blocos.
 
 REGRAS DE NUTRICAO:
 - nutricao_pre: especifique ALIMENTOS concretos, QUANTIDADE e TIMING (ex: "45min antes: 1 banana + 200ml suco de beterraba + 30g whey")
@@ -43,6 +45,8 @@ Responda SOMENTE em JSON valido com esta estrutura:
     "recuperacao": "string — jantar e suplementacao noturna para otimizar recuperacao"
   }
 }"""
+
+ADAPT_PROMPT = build_system_prompt(_SCHEDULE_ROLE)
 
 
 def adapt_schedule(

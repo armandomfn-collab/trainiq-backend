@@ -7,7 +7,9 @@ import anthropic
 def _get_client():
     return anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
-REVIEW_PROMPT = """Você é um coach de endurance de elite. Analise o treino concluído e gere um review detalhado.
+from services.coaching_brain import build_system_prompt
+
+_REVIEW_ROLE = """Você está gerando o REVIEW PÓS-TREINO. Analise o treino concluído com rigor técnico.
 
 Responda em JSON com esta estrutura:
 {
@@ -24,6 +26,8 @@ Responda em JSON com esta estrutura:
   "recomendacao_recuperacao": "string — o que fazer nas próximas horas",
   "impacto_forma": "string — como isso afeta CTL/ATL/TSB"
 }"""
+
+REVIEW_PROMPT = build_system_prompt(_REVIEW_ROLE)
 
 
 def generate_workout_review(workout: dict, metrics: dict, fitness: dict) -> dict:
