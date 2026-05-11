@@ -25,6 +25,7 @@ from services.database import (
     save_chat_message, get_chat_history, clear_chat_history,
     save_athlete_profile, get_athlete_profile,
 )
+from services.profile_sync import sync_profile_from_tp
 from services.body_analysis import analyze_body_composition
 from services.body_vision import extract_bioimpedance_from_image
 from services.scheduler import start_scheduler
@@ -550,6 +551,16 @@ def profile_get():
 def profile_save(req: AthleteProfileModel):
     save_athlete_profile(req.model_dump())
     return {"success": True, "profile": get_athlete_profile()}
+
+
+@app.post("/api/profile/sync")
+async def profile_sync():
+    """Auto-popula o perfil a partir do TrainingPeaks + histórico de treinos."""
+    try:
+        profile = await sync_profile_from_tp()
+        return {"success": True, "profile": profile}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ──────────────────────────────────────────────
