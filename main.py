@@ -3,15 +3,15 @@
 import asyncio
 import os
 import sys
-from datetime import date, timedelta, datetime as _datetime
-from zoneinfo import ZoneInfo
+from datetime import date, timedelta, datetime as _datetime, timezone as _tz
 from typing import Any
 
-BRT = ZoneInfo("America/Sao_Paulo")
+# Brasil (São Paulo) = UTC-3 fixo (sem horário de verão desde 2019)
+_BRT = _tz(timedelta(hours=-3))
 
 def now_brt() -> _datetime:
-    """Retorna o horário atual no fuso de Brasília (UTC-3)."""
-    return _datetime.now(BRT)
+    """Retorna o horário atual em Brasília (UTC-3). Sem dependência de tzdata."""
+    return _datetime.now(_BRT)
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
