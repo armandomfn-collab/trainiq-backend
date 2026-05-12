@@ -467,17 +467,24 @@ async def trigger_livetrack_email():
 # Biomecânica — análise de corrida em tempo real
 # ──────────────────────────────────────────────
 
-class BiomechanicsFrameRequest(BaseModel):
-    frame_base64: str
+class BiomechanicsSequenceRequest(BaseModel):
+    frames: list[str]          # lista de base64 JPEG, capturados a cada ~3s
     media_type: str = "image/jpeg"
 
 
-@app.post("/api/biomechanics/analyze-frame")
-async def analyze_biomechanics_frame(req: BiomechanicsFrameRequest):
-    """Recebe um frame de corrida (base64) e retorna feedback corretivo curto para TTS."""
-    from services.biomechanics import analyze_running_frame
+@app.post("/api/biomechanics/analyze-sequence")
+async def analyze_biomechanics_sequence(req: BiomechanicsSequenceRequest):
+    """
+    Recebe sequência de frames (30s de corrida) e retorna feedback consolidado
+    baseado em padrões recorrentes. Resposta inclui 'feedback' (TTS) e 'observacao' (tela).
+    """
+    from services.biomechanics import analyze_running_sequence
+    if not req.frames:
+        raise HTTPException(status_code=400, detail="Nenhum frame recebido")
+    if len(req.frames) > 15:
+        req.frames = req.frames[-15:]  # limita a 15 frames por segurança
     try:
-        result = analyze_running_frame(req.frame_base64, req.media_type)
+        result = analyze_running_sequence(req.frames, req.media_type)
         return result
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Erro na análise: {str(e)}")
