@@ -426,9 +426,28 @@ async def trigger_livetrack_email():
         diag["emails_encontrados"] = len(all_ids)
 
         for eid in reversed(all_ids):
-            _, data = mail.fetch(eid, "(ENVELOPE)")
-            envelope = data[0][1].decode(errors="ignore")
-            diag["emails_info"].append(envelope[:200])
+            _, data = mail.fetch(eid, "(RFC822)")
+            raw = data[0][1]
+            if isinstance(raw, int):
+                continue
+            import email as _email
+            msg = _email.message_from_bytes(raw)
+            body = ""
+            if msg.is_multipart():
+                for part in msg.walk():
+                    if part.get_content_type() in ("text/plain", "text/html"):
+                        body += part.get_payload(decode=True).decode("utf-8", errors="ignore")
+            else:
+                body = msg.get_payload(decode=True).decode("utf-8", errors="ignore")
+            # Mostra trecho do corpo pra ver formato da URL
+            import re as _re
+            urls = _re.findall(r'https?://[^\s<>"\']+garmin[^\s<>"\']+', body)
+            diag["emails_info"].append({
+                "assunto": str(msg.get("Subject", "")),
+                "de": str(msg.get("From", "")),
+                "urls_garmin": urls[:5],
+                "body_trecho": body[:500],
+            })
 
         mail.logout()
     except Exception as e:
