@@ -399,7 +399,7 @@ async def trigger_livetrack_email():
         imap_server = "imap.gmail.com" if "gmail" in gmail_user else "outlook.office365.com"
         mail = imaplib.IMAP4_SSL(imap_server)
         mail.login(gmail_user, gmail_pass)
-        mail.select('"[Gmail]/All Mail"')
+        mail.select('[Gmail]/All Mail')
 
         since = (datetime.now() - timedelta(hours=48)).strftime("%d-%b-%Y")
         _, ids = mail.search(None, f'(FROM "{GARMIN_SENDER}" SINCE "{since}")')
