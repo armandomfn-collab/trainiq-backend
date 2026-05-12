@@ -34,7 +34,8 @@ def find_latest_livetrack_url() -> str | None:
         imap_server = "imap.gmail.com" if "gmail" in gmail_user else "outlook.office365.com"
         mail = imaplib.IMAP4_SSL(imap_server)
         mail.login(gmail_user, gmail_pass)
-        mail.select("inbox")
+        # Busca em All Mail (pega inbox, promoções, atualizações, etc.)
+        mail.select('"[Gmail]/All Mail"')
 
         # Busca emails do Garmin nas ultimas 24h (lidos ou nao)
         since = (datetime.now() - timedelta(hours=24)).strftime("%d-%b-%Y")
