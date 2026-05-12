@@ -464,6 +464,26 @@ async def trigger_livetrack_email():
 
 
 # ──────────────────────────────────────────────
+# Biomecânica — análise de corrida em tempo real
+# ──────────────────────────────────────────────
+
+class BiomechanicsFrameRequest(BaseModel):
+    frame_base64: str
+    media_type: str = "image/jpeg"
+
+
+@app.post("/api/biomechanics/analyze-frame")
+async def analyze_biomechanics_frame(req: BiomechanicsFrameRequest):
+    """Recebe um frame de corrida (base64) e retorna feedback corretivo curto para TTS."""
+    from services.biomechanics import analyze_running_frame
+    try:
+        result = analyze_running_frame(req.frame_base64, req.media_type)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Erro na análise: {str(e)}")
+
+
+# ──────────────────────────────────────────────
 # Workout Builder (treinos estruturados)
 # ──────────────────────────────────────────────
 
