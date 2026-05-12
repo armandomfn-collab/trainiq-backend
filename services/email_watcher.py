@@ -6,7 +6,7 @@ import os
 import re
 from datetime import datetime, timedelta
 
-GARMIN_SENDER = "livetrack@garmin.com"
+GARMIN_SENDER = "noreply@garmin.com"
 LIVETRACK_URL_RE = re.compile(
     r"https://livetrack\.garmin\.com/session/[a-f0-9\-]+/token/[A-Za-z0-9]+"
 )
