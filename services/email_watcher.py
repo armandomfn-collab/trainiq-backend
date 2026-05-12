@@ -36,30 +36,37 @@ def find_latest_livetrack_url() -> str | None:
         mail.login(gmail_user, gmail_pass)
         mail.select("inbox")
 
-        # Busca emails do Garmin nas ultimas 24h
+        # Busca emails do Garmin nas ultimas 24h (lidos ou nao)
         since = (datetime.now() - timedelta(hours=24)).strftime("%d-%b-%Y")
-        _, ids = mail.search(None, f'(FROM "{GARMIN_SENDER}" SINCE "{since}" UNSEEN)')
+        _, ids = mail.search(None, f'(FROM "{GARMIN_SENDER}" SINCE "{since}")')
 
         if not ids[0]:
+            print(f"[EmailWatcher] Nenhum email do Garmin encontrado desde {since}")
             return None
 
-        # Pega o mais recente
-        latest_id = ids[0].split()[-1]
-        _, data   = mail.fetch(latest_id, "(RFC822)")
-        raw_email = data[0][1]
-        msg       = email.message_from_bytes(raw_email)
+        # Percorre do mais recente ao mais antigo procurando URL válida
+        all_ids = ids[0].split()
+        print(f"[EmailWatcher] {len(all_ids)} email(s) do Garmin encontrado(s)")
 
-        # Extrai o corpo
-        body = _extract_body(msg)
+        for email_id in reversed(all_ids):
+            _, data   = mail.fetch(email_id, "(RFC822)")
+            raw_email = data[0][1]
+            msg       = email.message_from_bytes(raw_email)
+            body      = _extract_body(msg)
 
-        # Procura a URL do LiveTrack
-        match = LIVETRACK_URL_RE.search(body)
-        if match:
-            url = match.group(0)
-            # Marca como lido
-            mail.store(latest_id, "+FLAGS", "\\Seen")
-            print(f"[EmailWatcher] LiveTrack URL encontrada: {url}")
-            return url
+            # Limpa HTML encoding e quebras de linha que podem quebrar a URL
+            body = re.sub(r'=\r?\n', '', body)   # quoted-printable line breaks
+            body = re.sub(r'=3D', '=', body)      # = encoded
+            body = re.sub(r'\s+', ' ', body)       # normaliza espaços
+
+            match = LIVETRACK_URL_RE.search(body)
+            if match:
+                url = match.group(0).rstrip('>"\'')  # remove chars HTML ao final
+                mail.store(email_id, "+FLAGS", "\\Seen")
+                print(f"[EmailWatcher] LiveTrack URL encontrada: {url}")
+                return url
+            else:
+                print(f"[EmailWatcher] Email ID {email_id}: sem URL de LiveTrack no corpo")
 
     except Exception as e:
         print(f"[EmailWatcher] Erro: {e}")

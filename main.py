@@ -371,6 +371,14 @@ async def trigger_workout_check():
     return {"success": True}
 
 
+@app.post("/api/trigger-livetrack-email")
+async def trigger_livetrack_email():
+    """Dispara verificação de email LiveTrack manualmente (para debug)."""
+    from services.email_watcher import find_latest_livetrack_url
+    url = find_latest_livetrack_url()
+    return {"url_encontrada": url, "success": url is not None}
+
+
 # ──────────────────────────────────────────────
 # Workouts
 # ──────────────────────────────────────────────
