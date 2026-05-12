@@ -468,23 +468,28 @@ async def trigger_livetrack_email():
 # ──────────────────────────────────────────────
 
 class BiomechanicsSequenceRequest(BaseModel):
-    frames: list[str]          # lista de base64 JPEG, capturados a cada ~3s
+    frames: list[str]           # lista de base64 JPEG
     media_type: str = "image/jpeg"
+    mode: str = "run"           # "run" | "gym"
+    exercise: str = ""          # nome do exercício (gym mode, opcional)
 
 
 @app.post("/api/biomechanics/analyze-sequence")
 async def analyze_biomechanics_sequence(req: BiomechanicsSequenceRequest):
     """
-    Recebe sequência de frames (30s de corrida) e retorna feedback consolidado
-    baseado em padrões recorrentes. Resposta inclui 'feedback' (TTS) e 'observacao' (tela).
+    Recebe sequência de frames e retorna feedback consolidado baseado em padrões.
+    mode='run': corrida (~30s, 10 frames)
+    mode='gym': academia (~12s, 6 frames) — Claude identifica o exercício automaticamente
     """
-    from services.biomechanics import analyze_running_sequence
+    from services.biomechanics import analyze_running_sequence, analyze_gym_sequence
     if not req.frames:
         raise HTTPException(status_code=400, detail="Nenhum frame recebido")
-    if len(req.frames) > 15:
-        req.frames = req.frames[-15:]  # limita a 15 frames por segurança
+    frames = req.frames[-15:]  # limita por segurança
     try:
-        result = analyze_running_sequence(req.frames, req.media_type)
+        if req.mode == "gym":
+            result = analyze_gym_sequence(frames, req.exercise, req.media_type)
+        else:
+            result = analyze_running_sequence(frames, req.media_type)
         return result
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Erro na análise: {str(e)}")
