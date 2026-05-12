@@ -85,6 +85,9 @@ REGRAS:
 - Converta minutos para segundos (ex: 12' = 720s)
 - Use as zonas do atleta para definir intensity_min e intensity_max
 - Se a zona não for especificada, infira pelo contexto (ex: "solto" = Z1/Z2)
+- CRÍTICO: Crie APENAS os blocos que o atleta descreveu. NÃO adicione aquecimento,
+  volta à calma ou qualquer bloco extra que não esteja explicitamente na descrição.
+  Se o atleta pediu "30min fácil", crie só esse bloco. Nada mais.
 - Responda SOMENTE com JSON válido, sem explicação"""
 
 

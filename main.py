@@ -468,10 +468,11 @@ async def trigger_livetrack_email():
 # ──────────────────────────────────────────────
 
 class WorkoutBuilderRequest(BaseModel):
-    sport: str          # Run | Bike | Swim
-    description: str    # texto livre: "12' Z2 + 4x(4'Z3+3'Z2) + 8' Z2"
-    date: str | None = None   # YYYY-MM-DD (só para criação)
-    title: str | None = None  # override do título gerado pelo Claude
+    sport: str
+    description: str
+    date: str | None = None
+    title: str | None = None
+    steps_override: list | None = None  # blocos editados pelo usuário no app
 
 
 @app.post("/api/workouts/preview-structured")
@@ -507,6 +508,9 @@ async def create_structured_workout(req: WorkoutBuilderRequest):
         raise HTTPException(status_code=422, detail=f"Erro ao parsear treino: {str(e)}")
 
     titulo = req.title or parsed.get("titulo", "Treino")
+    # Usa blocos editados pelo usuário se fornecidos
+    if req.steps_override:
+        parsed["steps"] = req.steps_override
     structure = build_structure_payload(parsed)
 
     result = await tp_create_workout(
