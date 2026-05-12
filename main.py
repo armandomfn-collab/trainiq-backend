@@ -97,6 +97,7 @@ def health():
         "status": "ok",
         "app": "TrainIQ",
         "version": "0.2.0",
+        "hora_brt": now_brt().strftime("%H:%M"),
         "db_path": str(DB_PATH),
         "db_exists": DB_PATH.exists(),
         "db_size_kb": round(DB_PATH.stat().st_size / 1024, 1) if DB_PATH.exists() else 0,
