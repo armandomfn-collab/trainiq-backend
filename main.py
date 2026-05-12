@@ -461,6 +461,74 @@ async def trigger_livetrack_email():
 
 
 # ──────────────────────────────────────────────
+# Workout Builder (treinos estruturados)
+# ──────────────────────────────────────────────
+
+class WorkoutBuilderRequest(BaseModel):
+    sport: str          # Run | Bike | Swim
+    description: str    # texto livre: "12' Z2 + 4x(4'Z3+3'Z2) + 8' Z2"
+    date: str | None = None   # YYYY-MM-DD (só para criação)
+    title: str | None = None  # override do título gerado pelo Claude
+
+
+@app.post("/api/workouts/preview-structured")
+async def preview_structured_workout(req: WorkoutBuilderRequest):
+    """Parseia descrição em linguagem natural e retorna blocos estruturados (sem criar no TP)."""
+    from services.workout_builder import parse_workout_text
+    try:
+        parsed = parse_workout_text(req.description, req.sport)
+        return {
+            "success": True,
+            "titulo": req.title or parsed.get("titulo", "Treino"),
+            "sport": req.sport,
+            "duration_min": parsed.get("duration_min"),
+            "primaryIntensityMetric": parsed.get("primaryIntensityMetric"),
+            "steps": parsed.get("steps", []),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Erro ao parsear treino: {str(e)}")
+
+
+@app.post("/api/workouts/create-structured")
+async def create_structured_workout(req: WorkoutBuilderRequest):
+    """Parseia descrição, converte para estrutura TP e cria o treino."""
+    from services.workout_builder import parse_workout_text, build_structure_payload
+    from tp_mcp.tools.workouts import tp_create_workout
+
+    if not req.date:
+        raise HTTPException(status_code=400, detail="Campo 'date' obrigatório para criação")
+
+    try:
+        parsed = parse_workout_text(req.description, req.sport)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Erro ao parsear treino: {str(e)}")
+
+    titulo = req.title or parsed.get("titulo", "Treino")
+    structure = build_structure_payload(parsed)
+
+    result = await tp_create_workout(
+        date_str=req.date,
+        sport=req.sport,
+        title=titulo,
+        description=req.description,
+        structure=structure,
+    )
+
+    if result.get("isError"):
+        raise HTTPException(status_code=400, detail=result.get("message", "Erro ao criar treino no TP"))
+
+    return {
+        "success": True,
+        "workout_id": result.get("workout_id"),
+        "titulo": titulo,
+        "sport": req.sport,
+        "date": req.date,
+        "duration_min": parsed.get("duration_min"),
+        "steps_count": len(parsed.get("steps", [])),
+    }
+
+
+# ──────────────────────────────────────────────
 # Workouts
 # ──────────────────────────────────────────────
 
