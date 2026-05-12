@@ -143,6 +143,7 @@ async def get_analysis():
         metrics=metrics,
         workouts=workouts,
         fitness=fitness,
+        hora_atual=now_brt().strftime("%H:%M"),
     )
 
     return {"date": today, "analysis": analysis, "workouts": workouts}
@@ -223,6 +224,7 @@ async def confirm_schedule(req: ScheduleRequest):
         metrics=metrics,
         fitness=fitness,
         date=req.date,
+        hora_atual=now_brt().strftime("%H:%M"),
     )
 
     return {"date": req.date, "schedule": result, "workout_order": workout_order}

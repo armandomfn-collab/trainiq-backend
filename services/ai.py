@@ -54,11 +54,15 @@ def analyze_athlete_data(
     metrics: dict,
     workouts: list,
     fitness: dict,
+    hora_atual: str = "",
 ) -> dict:
     """Run Claude analysis on athlete data and return structured recommendations."""
 
     user_message = f"""
+DATA: {today} | HORA ATUAL (Brasília): {hora_atual}
+
 Analise os dados do atleta para hoje ({today}) e gere recomendações:
+IMPORTANTE: Todos os horários sugeridos devem ser baseados na hora atual de Brasília ({hora_atual}).
 
 ## MÉTRICAS DE HOJE
 {json.dumps(metrics, ensure_ascii=False, indent=2)}

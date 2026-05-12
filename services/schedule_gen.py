@@ -55,10 +55,14 @@ def adapt_schedule(
     metrics: dict,
     fitness: dict,
     date: str,
+    hora_atual: str = "",
 ) -> dict:
     """Generate AI recommendations adapted to the chosen workout order."""
 
-    msg = f"""O atleta montou o seguinte cronograma para {date}:
+    msg = f"""DATA: {date} | HORA ATUAL (Brasília): {hora_atual}
+Qualquer referência a "agora", "neste momento" ou horários do dia deve usar como base {hora_atual} BRT.
+
+O atleta montou o seguinte cronograma para {date}:
 
 ORDEM E HORARIOS DEFINIDOS PELO ATLETA:
 {json.dumps(workout_order, ensure_ascii=False, indent=2)}
