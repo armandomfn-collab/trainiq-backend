@@ -374,9 +374,53 @@ async def trigger_workout_check():
 @app.get("/api/trigger-livetrack-email")
 async def trigger_livetrack_email():
     """Dispara verificação de email LiveTrack manualmente (para debug)."""
-    from services.email_watcher import find_latest_livetrack_url
+    import imaplib, os
+    from services.email_watcher import find_latest_livetrack_url, GARMIN_SENDER
+    from datetime import datetime, timedelta
+
+    gmail_user = os.environ.get("GMAIL_USER")
+    gmail_pass = os.environ.get("GMAIL_APP_PASSWORD")
+
+    diag = {
+        "gmail_user": gmail_user or "(não configurado)",
+        "gmail_pass_set": bool(gmail_pass),
+        "emails_encontrados": 0,
+        "emails_info": [],
+        "url_encontrada": None,
+        "success": False,
+        "erro": None,
+    }
+
+    if not gmail_user or not gmail_pass:
+        diag["erro"] = "GMAIL_USER ou GMAIL_APP_PASSWORD não configurados"
+        return diag
+
+    try:
+        imap_server = "imap.gmail.com" if "gmail" in gmail_user else "outlook.office365.com"
+        mail = imaplib.IMAP4_SSL(imap_server)
+        mail.login(gmail_user, gmail_pass)
+        mail.select("inbox")
+
+        since = (datetime.now() - timedelta(hours=48)).strftime("%d-%b-%Y")
+        _, ids = mail.search(None, f'(FROM "{GARMIN_SENDER}" SINCE "{since}")')
+
+        all_ids = ids[0].split() if ids[0] else []
+        diag["emails_encontrados"] = len(all_ids)
+
+        for eid in reversed(all_ids):
+            _, data = mail.fetch(eid, "(ENVELOPE)")
+            envelope = data[0][1].decode(errors="ignore")
+            diag["emails_info"].append(envelope[:200])
+
+        mail.logout()
+    except Exception as e:
+        diag["erro"] = str(e)
+        return diag
+
     url = find_latest_livetrack_url()
-    return {"url_encontrada": url, "success": url is not None}
+    diag["url_encontrada"] = url
+    diag["success"] = url is not None
+    return diag
 
 
 # ──────────────────────────────────────────────
