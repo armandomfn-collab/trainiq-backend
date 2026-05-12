@@ -34,8 +34,22 @@ def find_latest_livetrack_url() -> str | None:
         imap_server = "imap.gmail.com" if "gmail" in gmail_user else "outlook.office365.com"
         mail = imaplib.IMAP4_SSL(imap_server)
         mail.login(gmail_user, gmail_pass)
-        # Busca em All Mail (pega inbox, promoções, atualizações, etc.)
-        mail.select('[Gmail]/All Mail')
+        # Descobre a pasta All Mail (nome varia por idioma do Gmail)
+        selected_folder = "INBOX"
+        try:
+            _, folders = mail.list()
+            for f in folders:
+                f_str = f.decode() if isinstance(f, bytes) else str(f)
+                if "All Mail" in f_str or "Todos" in f_str:
+                    # Extrai o nome da pasta: última parte após o separador
+                    parts = f_str.split('"/" ')
+                    if len(parts) > 1:
+                        selected_folder = parts[-1].strip().strip('"')
+                        break
+        except Exception:
+            pass
+        print(f"[EmailWatcher] Selecionando pasta: {selected_folder}")
+        mail.select(f'"{selected_folder}"' if " " in selected_folder else selected_folder)
 
         # Busca emails do Garmin nas ultimas 24h (lidos ou nao)
         since = (datetime.now() - timedelta(hours=24)).strftime("%d-%b-%Y")

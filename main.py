@@ -384,6 +384,8 @@ async def trigger_livetrack_email():
     diag = {
         "gmail_user": gmail_user or "(não configurado)",
         "gmail_pass_set": bool(gmail_pass),
+        "pastas": [],
+        "pasta_selecionada": None,
         "emails_encontrados": 0,
         "emails_info": [],
         "url_encontrada": None,
@@ -399,7 +401,23 @@ async def trigger_livetrack_email():
         imap_server = "imap.gmail.com" if "gmail" in gmail_user else "outlook.office365.com"
         mail = imaplib.IMAP4_SSL(imap_server)
         mail.login(gmail_user, gmail_pass)
-        mail.select('[Gmail]/All Mail')
+
+        # Lista todas as pastas para debug e encontra All Mail
+        _, folders = mail.list()
+        folder_names = [f.decode() if isinstance(f, bytes) else str(f) for f in folders]
+        diag["pastas"] = folder_names
+
+        selected = "INBOX"
+        for f_str in folder_names:
+            if "All Mail" in f_str or "Todos" in f_str:
+                parts = f_str.split('"/" ')
+                if len(parts) > 1:
+                    selected = parts[-1].strip().strip('"')
+                    break
+        diag["pasta_selecionada"] = selected
+
+        folder_arg = f'"{selected}"' if " " in selected else selected
+        mail.select(folder_arg)
 
         since = (datetime.now() - timedelta(hours=48)).strftime("%d-%b-%Y")
         _, ids = mail.search(None, f'(FROM "{GARMIN_SENDER}" SINCE "{since}")')
