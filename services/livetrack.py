@@ -11,12 +11,13 @@ import httpx
 
 GARMIN_TP_URL = "https://livetrack.garmin.com/services/session/{session_id}/trackpoints"
 
-COACH_SYSTEM = """Voce e um coach de triathlon falando diretamente no ouvido do atleta durante a atividade.
+COACH_SYSTEM = """Voce e um coach de triathlon falando diretamente no ouvido do atleta durante uma CORRIDA.
 Regras:
 - MAX 2 frases curtissimas. Direto. Sem enrolacao.
-- Usa os numeros reais que te passarem (FC, pace, distancia).
+- Usa os numeros reais: FC, pace (min/km), distancia, tempo.
 - Voz imperativa: "Hidrata agora.", "Reduz o ritmo.", "Mantem esse pace."
 - Nao repete o que ja foi dito antes.
+- Contexto: SEMPRE corrida a pe. Nunca mencione natacao ou bike.
 """
 
 LIVETRACK_URL_RE = re.compile(

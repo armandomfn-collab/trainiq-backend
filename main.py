@@ -865,16 +865,19 @@ async def livetrack_start(req: LiveTrackStartRequest):
             workouts = workouts_raw.get("workouts", [])
 
             if workouts:
-                # Prefere corrida; senão pega o primeiro
-                workout = next(
-                    (w for w in workouts if w.get("sport", "").lower() in ("run", "running", "corrida")),
-                    workouts[0]
-                )
-                # Se workout_id fornecido, tenta encontrar o workout exato
+                RUN_SPORTS = {"run", "running", "corrida"}
+                # Se workout_id fornecido, usa ele direto
                 if req.workout_id:
-                    exact = next((w for w in workouts if str(w.get("id")) == str(req.workout_id)), None)
-                    if exact:
-                        workout = exact
+                    workout = next((w for w in workouts if str(w.get("id")) == str(req.workout_id)), None)
+                else:
+                    # LiveTrack é sempre corrida — nunca assume natação ou bike
+                    workout = next(
+                        (w for w in workouts if w.get("sport", "").lower() in RUN_SPORTS),
+                        None,
+                    )
+
+                if not workout:
+                    raise ValueError("Nenhum treino de corrida encontrado para hoje no TrainingPeaks.")
 
                 parsed = parse_workout_into_blocks(
                     title=workout.get("title", "Treino"),

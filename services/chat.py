@@ -220,26 +220,67 @@ def _format_context(ctx: dict) -> str:
     return "\n".join(lines)
 
 
+# ─── Classificação de intent (sem chamada de API) ─────────────────────────────
+
+_TP_KEYWORDS = {
+    # ações diretas
+    "deleta", "delete", "exclui", "exclui", "remove", "cria", "criar",
+    "move", "mover", "altera", "alterar", "atualiza", "atualizar",
+    # consultas de dados ao vivo
+    "hoje", "amanhã", "amanha", "semana", "treino", "treinos", "workout",
+    "tsb", "ctl", "atl", "hrv", "forma", "fitness", "planejado",
+    "pendente", "concluído", "concluido", "schedule", "plano",
+    "natação", "natacao", "corrida", "bike", "pedal", "swim", "run",
+}
+
+def _needs_tp_context(message: str) -> bool:
+    """Retorna True se a mensagem provavelmente precisa de dados ao vivo do TP."""
+    words = set(message.lower().split())
+    return bool(words & _TP_KEYWORDS)
+
+
 # ─── Loop agêntico ─────────────────────────────────────────────────────────────
 async def chat_with_coach(messages: list[dict], context: dict | None = None) -> str:
-    """Conversa com Claude. Claude pode chamar ferramentas reais do TP."""
+    """
+    Conversa com Claude em dois modos:
+    - LIGHT (Haiku): perguntas gerais de coaching, sem dados do TP
+    - FULL  (Sonnet): ações no TP ou consultas de dados ao vivo
+    """
+    # Última mensagem do usuário para classificar o intent
+    last_user_msg = next(
+        (m["content"] for m in reversed(messages) if m["role"] == "user"), ""
+    )
+    use_tp = _needs_tp_context(str(last_user_msg))
 
     system = _get_system_prompt()
-    if context:
+
+    if use_tp and context:
+        # Modo FULL: injeta contexto TP + usa Sonnet com ferramentas
         ctx_str = _format_context(context)
         system += f"\n\n════════════════════════════════════════\nCONTEXTO ATUAL DO ATLETA:\n════════════════════════════════════════\n{ctx_str}"
+        model  = "claude-sonnet-4-5"
+        tools  = TOOLS
+    else:
+        # Modo LIGHT: sem contexto TP, sem ferramentas — Haiku resolve
+        model = "claude-haiku-4-5"
+        tools = []
 
     client = _get_client()
-    current_messages = list(messages)
+    # Limita histórico: 8 msgs no modo light, 16 no full
+    history_limit = 16 if use_tp else 8
+    current_messages = list(messages[-history_limit:])
 
     for _ in range(8):  # max 8 rodadas de tool calls
-        response = client.messages.create(
-            model="claude-sonnet-4-5",
-            max_tokens=800,
+        kwargs: dict = dict(
+            model=model,
+            max_tokens=600,
             system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
-            tools=TOOLS,
             messages=current_messages,
         )
+        if tools:
+            kwargs["tools"] = tools
+
+        response = client.messages.create(**kwargs)
 
         # Resposta final — sem tool calls
         if response.stop_reason == "end_turn":
