@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -16,6 +16,11 @@ from services.database import (
 from services.push import send_push_notification
 
 scheduler = AsyncIOScheduler()
+
+# Rastreia URLs do LiveTrack já iniciadas para não criar sessões duplicadas
+_started_livetrack_urls: set[str] = set()
+# Limite de duração de uma sessão LiveTrack (3 horas)
+_LIVETRACK_MAX_DURATION_HOURS = 3
 
 
 async def run_daily_analysis():
@@ -69,7 +74,7 @@ async def run_daily_analysis():
 
 
 async def check_completed_workouts():
-    """Roda a cada 30min — detecta treinos concluídos e envia review."""
+    """Roda a cada 30min — detecta treinos concluídos RECENTEMENTE e envia review."""
     print("🔍 Verificando treinos concluídos...")
     try:
         from tp_mcp.tools.workouts import tp_get_workouts
@@ -82,14 +87,41 @@ async def check_completed_workouts():
 
         workouts_raw = await tp_get_workouts(today, today)
         all_w = workouts_raw.get("workouts", [])
-        completed = [w for w in all_w if w.get("type") == "completed" or any(
+
+        # Só considera treinos com dados reais (concluídos)
+        completed = [w for w in all_w if any(
             w.get(f) not in (None, 0) for f in ["distance_actual", "duration_actual", "tss_actual"]
         )]
 
+        if not completed:
+            print("🔍 Nenhum treino concluído hoje.")
+            return
+
+        # Proteção: só processa treinos cuja conclusão foi recente (últimas 6h)
+        # Isso evita re-processar treinos antigos após um redeploy
+        cutoff = datetime.now() - timedelta(hours=6)
+
         for workout in completed:
             workout_id = workout.get("id")
-            if not workout_id or is_workout_processed(workout_id):
+            if not workout_id:
                 continue
+
+            # Verifica se já foi processado
+            if is_workout_processed(workout_id):
+                continue
+
+            # Verifica se o treino foi completado recentemente (via end_time ou last_modified)
+            completed_at_str = workout.get("completedAt") or workout.get("lastModifiedDate") or ""
+            if completed_at_str:
+                try:
+                    # Remove milissegundos/timezone simplificado
+                    completed_at = datetime.fromisoformat(completed_at_str[:19])
+                    if completed_at < cutoff:
+                        print(f"⏭️ Treino {workout.get('title')} ignorado — concluído há mais de 6h")
+                        mark_workout_processed(workout_id)  # marca para não tentar de novo
+                        continue
+                except Exception:
+                    pass  # sem timestamp válido, processa mesmo assim
 
             print(f"📊 Gerando review para: {workout.get('title')}")
 
@@ -122,19 +154,32 @@ async def check_completed_workouts():
 
 
 async def check_livetrack_email():
-    """Roda a cada 2min — detecta email do Garmin LiveTrack e inicia monitoramento com coach do TP."""
+    """Roda a cada 5min — detecta email do Garmin LiveTrack e inicia monitoramento com coach do TP."""
     from services.email_watcher import find_latest_livetrack_url
     from services.livetrack import parse_livetrack_url, LiveTrackSession, get_current, set_current
     from services.workout_coach import parse_workout_into_blocks, WorkoutCoach
     from tp_mcp.tools.workouts import tp_get_workouts
 
-    # Nao inicia novo se ja tem sessao ativa
     current = get_current()
+
+    # Auto-stop: encerra sessão que passou do limite de duração
+    if current and current.status == "active" and current.start_time:
+        elapsed_h = (datetime.now() - current.start_time).total_seconds() / 3600
+        if elapsed_h >= _LIVETRACK_MAX_DURATION_HOURS:
+            print(f"[Scheduler] LiveTrack auto-stop: {elapsed_h:.1f}h de atividade")
+            current.stop()
+            current = None
+
+    # Nao inicia novo se ja tem sessao ativa
     if current and current.status == "active":
         return
 
     url = find_latest_livetrack_url()
     if not url:
+        return
+
+    # Evita iniciar sessão duplicada com a mesma URL
+    if url in _started_livetrack_urls:
         return
 
     try:
@@ -145,32 +190,37 @@ async def check_livetrack_email():
         if current:
             current.stop()
 
-        # Tenta carregar treino de hoje do TP
+        # Tenta carregar treino de corrida de hoje do TP
         coach = None
+        RUN_SPORTS = {"run", "running", "corrida"}
         try:
             today = date.today().isoformat()
             workouts_raw = await tp_get_workouts(today, today)
             workouts = workouts_raw.get("workouts", [])
             if workouts:
                 w = next(
-                    (x for x in workouts if (x.get("sport") or "").lower() in ("run", "running")),
-                    workouts[0]
+                    (x for x in workouts if (x.get("sport") or "").lower() in RUN_SPORTS),
+                    None,
                 )
-                parsed = parse_workout_into_blocks(
-                    title=w.get("title", "Treino"),
-                    description=w.get("description", ""),
-                    duration_planned_h=w.get("duration_planned") or 1.0,
-                    tss_planned=w.get("tss_planned"),
-                )
-                if parsed and parsed.get("blocks"):
-                    coach = WorkoutCoach(parsed)
-                    print(f"[Scheduler] Coach estruturado: {parsed.get('nome')}")
+                if w:
+                    parsed = parse_workout_into_blocks(
+                        title=w.get("title", "Treino"),
+                        description=w.get("description", ""),
+                        duration_planned_h=w.get("duration_planned") or 1.0,
+                        tss_planned=w.get("tss_planned"),
+                    )
+                    if parsed and parsed.get("blocks"):
+                        coach = WorkoutCoach(parsed)
+                        print(f"[Scheduler] Coach estruturado: {parsed.get('nome')}")
+                else:
+                    print("[Scheduler] Nenhum treino de corrida hoje — LiveTrack sem coach estruturado")
         except Exception as e:
             print(f"[Scheduler] Treino do TP nao carregado: {e}")
 
         session = LiveTrackSession(session_id, token, workout_coach=coach)
         set_current(session)
         session.start()
+        _started_livetrack_urls.add(url)
         print(f"[Scheduler] Sessao iniciada {'com coach' if coach else 'modo livre'}")
     except Exception as e:
         print(f"[Scheduler] Erro ao iniciar LiveTrack: {e}")
@@ -194,10 +244,10 @@ def start_scheduler():
         replace_existing=True,
     )
 
-    # Monitoramento de email do Garmin LiveTrack a cada 2min
+    # Monitoramento de email do Garmin LiveTrack a cada 5min
     scheduler.add_job(
         check_livetrack_email,
-        IntervalTrigger(minutes=2),
+        IntervalTrigger(minutes=5),
         id="livetrack_email",
         replace_existing=True,
     )
