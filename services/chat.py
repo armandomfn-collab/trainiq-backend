@@ -234,9 +234,9 @@ async def chat_with_coach(messages: list[dict], context: dict | None = None) -> 
 
     for _ in range(8):  # max 8 rodadas de tool calls
         response = client.messages.create(
-            model="claude-opus-4-5",
+            model="claude-sonnet-4-5",
             max_tokens=800,
-            system=system,
+            system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
             tools=TOOLS,
             messages=current_messages,
         )

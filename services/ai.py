@@ -84,7 +84,7 @@ Gere recomendações específicas e práticas considerando:
     response = _get_client().messages.create(
         model="claude-opus-4-5",
         max_tokens=2000,
-        system=SYSTEM_PROMPT,
+        system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": user_message}],
     )
 

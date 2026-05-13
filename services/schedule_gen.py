@@ -83,7 +83,7 @@ Se a sequencia nao for ideal, explique e sugira como compensar.
     response = _get_client().messages.create(
         model="claude-opus-4-5",
         max_tokens=2000,
-        system=ADAPT_PROMPT,
+        system=[{"type": "text", "text": ADAPT_PROMPT, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": msg}],
     )
 

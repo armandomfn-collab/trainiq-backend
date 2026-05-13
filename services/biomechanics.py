@@ -112,7 +112,7 @@ def analyze_running_sequence(frames: list[str], media_type: str = "image/jpeg") 
         "Identifique padrões recorrentes e dê o feedback mais importante."
     )
     response = _get_client().messages.create(
-        model="claude-opus-4-5", max_tokens=120,
+        model="claude-haiku-4-5", max_tokens=120,
         system=_RUN_PROMPT,
         messages=[{"role": "user", "content": content}],
     )
@@ -128,7 +128,7 @@ def analyze_gym_sequence(frames: list[str], exercise: str = "", media_type: str 
         "Identifique o exercício, analise os padrões recorrentes e dê o feedback mais importante."
     )
     response = _get_client().messages.create(
-        model="claude-opus-4-5", max_tokens=150,
+        model="claude-haiku-4-5", max_tokens=150,
         system=_GYM_PROMPT,
         messages=[{"role": "user", "content": content}],
     )

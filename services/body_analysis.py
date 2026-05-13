@@ -115,7 +115,7 @@ Analise a composicao corporal considerando o historico de treino. Foco em reduca
 """
 
     response = _get_client().messages.create(
-        model="claude-opus-4-5",
+        model="claude-sonnet-4-5",
         max_tokens=1000,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": msg}],

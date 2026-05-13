@@ -47,7 +47,7 @@ async def extract_bioimpedance_from_image(image_base64: str, media_type: str = "
     today = date.today().isoformat()
 
     response = await client.messages.create(
-        model="claude-opus-4-5",
+        model="claude-sonnet-4-5",
         max_tokens=600,
         messages=[{
             "role": "user",

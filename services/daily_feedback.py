@@ -130,7 +130,7 @@ Analise cada treino com olhar tecnico. Compara real vs planejado. Identifica o q
     response = _get_client().messages.create(
         model="claude-opus-4-5",
         max_tokens=2000,
-        system=FEEDBACK_PROMPT,
+        system=[{"type": "text", "text": FEEDBACK_PROMPT, "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": msg}],
     )
 

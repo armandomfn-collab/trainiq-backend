@@ -53,7 +53,7 @@ Avalie:
 """
 
     response = _get_client().messages.create(
-        model="claude-opus-4-5",
+        model="claude-sonnet-4-5",
         max_tokens=1000,
         system=REVIEW_PROMPT,
         messages=[{"role": "user", "content": user_message}],
