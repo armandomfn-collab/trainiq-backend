@@ -55,9 +55,11 @@ TREINOS — REGRA CRÍTICA:
 def _get_system_prompt() -> str:
     """Gera o system prompt de chat — leve, focado em conversa."""
     athlete_ctx = get_athlete_context()
-    return _CHAT_SYSTEM.format(
-        persona=PERSONA.strip(),
-        athlete_context=athlete_ctx,
+    # Usa substituição simples em vez de .format() — athlete_ctx tem JSON com { }
+    return (
+        _CHAT_SYSTEM
+        .replace("{persona}", PERSONA.strip())
+        .replace("{athlete_context}", athlete_ctx)
     )
 
 
