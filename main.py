@@ -85,6 +85,28 @@ def _extract_fitness_summary(fitness_data: dict) -> dict:
     return fitness_data.get("current", {})
 
 
+def _is_completed(w: dict) -> bool:
+    """Detecta se um treino foi concluído.
+    Verifica o campo 'completed' (bool), 'type' == 'completed',
+    ou presença de dados reais (duration_actual, tss_actual, distance_actual).
+    """
+    # Campo booleano direto do TP
+    if w.get("completed") is True:
+        return True
+    # Type derivado pelo tp_mcp
+    if w.get("type") == "completed":
+        return True
+    # Tem tempo real registrado (basta não ser None)
+    if w.get("duration_actual") is not None:
+        return True
+    # Outros campos reais como fallback
+    for field in ("tss_actual", "distance_actual", "calories_actual"):
+        val = w.get(field)
+        if val is not None and val != 0:
+            return True
+    return False
+
+
 # ──────────────────────────────────────────────
 # Endpoints principais
 # ──────────────────────────────────────────────
@@ -116,11 +138,14 @@ async def get_dashboard():
         tp_get_fitness(),
     )
 
+    raw_workouts = workouts_raw.get("workouts", [])
+    workouts = [{**w, "completed": _is_completed(w)} for w in raw_workouts]
+
     return {
         "date": today,
         "metrics": _extract_metrics_summary(metrics_raw),
         "fitness": _extract_fitness_summary(fitness_raw),
-        "workouts": workouts_raw.get("workouts", []),
+        "workouts": workouts,
     }
 
 
@@ -331,19 +356,7 @@ async def get_daily_summary():
     metrics = _extract_metrics_summary(metrics_raw)
     fitness = _extract_fitness_summary(fitness_raw)
 
-    def _is_completed(w: dict) -> bool:
-        """Detecta se um treino foi concluido pelos dados reais presentes."""
-        if w.get("type") == "completed":
-            return True
-        # Tem dados reais registrados
-        for field in ["distance_actual", "duration_actual", "tss_actual", "calories_actual"]:
-            if w.get(field) not in (None, 0):
-                return True
-        return False
-
-    workout_status = []
-    for w in all_workouts:
-        workout_status.append({**w, "completed": _is_completed(w)})
+    workout_status = [{**w, "completed": _is_completed(w)} for w in all_workouts]
 
     all_done = len(workout_status) > 0 and all(w["completed"] for w in workout_status)
     any_done = any(w["completed"] for w in workout_status)
