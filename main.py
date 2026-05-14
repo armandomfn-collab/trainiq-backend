@@ -124,6 +124,60 @@ async def get_dashboard():
     }
 
 
+@app.get("/api/metrics/history")
+async def get_metrics_history():
+    """Retorna 7 dias de métricas para sparklines (HRV, sono, body battery, FC repouso, CTL, ATL, TSB)."""
+    today = date.today().isoformat()
+    week_ago = (date.today() - timedelta(days=7)).isoformat()
+
+    metrics_raw, fitness_raw = await asyncio.gather(
+        tp_get_metrics(week_ago, today),
+        tp_get_fitness(),
+    )
+
+    # Histórico por dia
+    days_metrics = []
+    for entry in metrics_raw.get("metrics", []):
+        day = entry.get("date", "")[:10]
+        row: dict = {"date": day}
+        for detail in entry.get("details", []):
+            label = detail.get("label", "")
+            val   = detail.get("value")
+            if label in ("HRV", "Sleep Hours", "Body Battery", "Resting Heart Rate") and val is not None:
+                # Body Battery vem como [min, max, avg] — pega avg
+                if isinstance(val, list):
+                    val = val[2] if len(val) > 2 else val[-1]
+                row[label] = round(float(val), 1)
+        days_metrics.append(row)
+
+    # Histórico CTL/ATL/TSB dos últimos 7 dias (fitness.history se disponível)
+    fitness_history = fitness_raw.get("history", [])
+
+    return {
+        "health": days_metrics[-7:],
+        "fitness_history": fitness_history[-7:],
+        "current_fitness": fitness_raw.get("current", {}),
+    }
+
+
+@app.get("/api/workout/blocks/{workout_id}")
+async def get_workout_blocks(workout_id: str):
+    """Parseia a descrição de um treino do TP em blocos estruturados."""
+    today = date.today().isoformat()
+    workouts_raw = await tp_get_workouts(today, today)
+    workouts = workouts_raw.get("workouts", [])
+    workout = next((w for w in workouts if str(w.get("id")) == str(workout_id)), None)
+    if not workout:
+        raise HTTPException(status_code=404, detail="Treino não encontrado")
+    parsed = parse_workout_into_blocks(
+        title=workout.get("title", "Treino"),
+        description=workout.get("description", ""),
+        duration_planned_h=workout.get("duration_planned") or 1.0,
+        tss_planned=workout.get("tss_planned"),
+    )
+    return {"workout_id": workout_id, "blocks": parsed.get("blocks", []), "parsed": parsed}
+
+
 @app.get("/api/analysis")
 async def get_analysis():
     today = date.today().isoformat()
