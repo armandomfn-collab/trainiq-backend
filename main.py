@@ -86,6 +86,154 @@ def _extract_fitness_summary(fitness_data: dict) -> dict:
     return fitness_data.get("current", {})
 
 
+# ── Baselines do atleta (Armando) ─────────────────────────────────────────────
+_BASELINES = {
+    "hrv_min": 36, "hrv_max": 40,       # ms
+    "hr_rest_min": 50, "hr_rest_max": 52, # bpm
+    "sleep_target": 7.5,                  # horas
+    "battery_good": 60, "battery_ok": 40, # %
+}
+
+
+def _score_hrv(val: float | None) -> int | None:
+    if val is None: return None
+    baseline_mid = (_BASELINES["hrv_min"] + _BASELINES["hrv_max"]) / 2  # 38
+    ratio = val / baseline_mid
+    if ratio >= 1.05: return 10
+    if ratio >= 0.97: return 9
+    if ratio >= 0.90: return 8
+    if ratio >= 0.82: return 7
+    if ratio >= 0.74: return 6
+    if ratio >= 0.65: return 5
+    if ratio >= 0.55: return 4
+    if ratio >= 0.45: return 3
+    return 2
+
+
+def _score_battery(val: float | None) -> int | None:
+    if val is None: return None
+    if val >= 85: return 10
+    if val >= 75: return 9
+    if val >= 65: return 8
+    if val >= 55: return 7
+    if val >= 45: return 6
+    if val >= 35: return 5
+    if val >= 25: return 4
+    if val >= 15: return 3
+    return 2
+
+
+def _score_hr_rest(val: float | None) -> int | None:
+    """FC repouso: menor é melhor. Acima do baseline = penaliza."""
+    if val is None: return None
+    baseline_mid = (_BASELINES["hr_rest_min"] + _BASELINES["hr_rest_max"]) / 2  # 51
+    diff = val - baseline_mid
+    if diff <= -3:  return 10
+    if diff <= 0:   return 9
+    if diff <= 2:   return 8
+    if diff <= 4:   return 7
+    if diff <= 6:   return 6
+    if diff <= 9:   return 5
+    if diff <= 12:  return 4
+    if diff <= 15:  return 3
+    return 2
+
+
+def _score_sleep(val: float | None) -> int | None:
+    if val is None: return None
+    target = _BASELINES["sleep_target"]
+    ratio = val / target
+    if ratio >= 1.07: return 10
+    if ratio >= 1.00: return 9
+    if ratio >= 0.93: return 8
+    if ratio >= 0.87: return 7
+    if ratio >= 0.80: return 6
+    if ratio >= 0.73: return 5
+    if ratio >= 0.67: return 4
+    if ratio >= 0.60: return 3
+    return 2
+
+
+def _compute_health_scores(m: dict) -> dict:
+    """Calcula notas 1-10 para cada métrica de saúde."""
+    hrv   = m.get("HRV")
+    bb    = m.get("Body Battery")
+    hr    = m.get("Resting Heart Rate")
+    sleep = m.get("Sleep Hours")
+
+    if isinstance(bb, list):
+        bb = bb[2] if len(bb) > 2 else bb[-1]
+
+    return {
+        "HRV":               _score_hrv(hrv),
+        "Body Battery":      _score_battery(bb),
+        "Resting Heart Rate": _score_hr_rest(hr),
+        "Sleep Hours":       _score_sleep(sleep),
+    }
+
+
+def _build_health_summary(m: dict, scores: dict) -> dict:
+    """Gera nota geral e texto resumo de 2 linhas baseados nos dados reais."""
+    valid = [v for v in scores.values() if v is not None]
+    if not valid:
+        return {"score": None, "label": "—", "summary": "Dados insuficientes para avaliação."}
+
+    avg = round(sum(valid) / len(valid), 1)
+    overall = round(avg)
+
+    hrv   = m.get("HRV")
+    bb    = m.get("Body Battery")
+    hr    = m.get("Resting Heart Rate")
+    sleep = m.get("Sleep Hours")
+    if isinstance(bb, list):
+        bb = bb[2] if len(bb) > 2 else bb[-1]
+
+    # Identifica pontos fracos (nota ≤ 6) e fortes (nota ≥ 8)
+    weak, strong = [], []
+    labels = {
+        "HRV": f"HRV {hrv}ms" if hrv else "HRV",
+        "Body Battery": f"Body Battery {bb}%" if bb else "Body Battery",
+        "Resting Heart Rate": f"FC repouso {hr}bpm" if hr else "FC repouso",
+        "Sleep Hours": f"sono {sleep}h" if sleep else "sono",
+    }
+    for key, score in scores.items():
+        if score is None: continue
+        if score <= 6: weak.append(labels[key])
+        elif score >= 8: strong.append(labels[key])
+
+    # Linha 1: estado geral
+    if overall >= 9:
+        line1 = "Recuperação excelente — corpo em condições ideais para treino de qualidade."
+    elif overall >= 7:
+        line1 = f"Boa recuperação."
+        if strong: line1 += f" {', '.join(strong[:2])} {'estão' if len(strong)>1 else 'está'} ótimos."
+    elif overall >= 5:
+        line1 = "Recuperação moderada — sinais de fadiga presentes."
+    else:
+        line1 = "Recuperação comprometida — corpo pedindo descanso."
+
+    # Linha 2: detalhe do ponto crítico
+    if weak:
+        if overall >= 7:
+            line2 = f"Ponto de atenção: {weak[0]}."
+        elif overall >= 5:
+            line2 = f"{' e '.join(weak[:2])} {'estão' if len(weak)>1 else 'está'} abaixo do seu baseline. Priorize Z1-Z2 hoje."
+        else:
+            line2 = f"{' e '.join(weak[:2])} {'estão' if len(weak)>1 else 'está'} significativamente abaixo. Considere descanso ativo."
+    elif overall >= 8:
+        line2 = "Dia ideal para treino de qualidade ou sessão longa."
+    else:
+        line2 = "Mantenha intensidade moderada e monitore durante o treino."
+
+    label_map = {10: "Ótimo", 9: "Ótimo", 8: "Bom", 7: "Bom", 6: "Regular", 5: "Regular", 4: "Fraco", 3: "Fraco", 2: "Crítico"}
+
+    return {
+        "score": overall,
+        "label": label_map.get(overall, "—"),
+        "summary": f"{line1} {line2}".strip(),
+    }
+
+
 def _is_completed(w: dict) -> bool:
     """Detecta se um treino foi concluído.
     Verifica o campo 'completed' (bool), 'type' == 'completed',
@@ -179,10 +327,17 @@ async def get_metrics_history():
     # Histórico CTL/ATL/TSB dos últimos 7 dias (fitness.history se disponível)
     fitness_history = fitness_raw.get("history", [])
 
+    # Scores e resumo do dia atual (último entry)
+    today_metrics = days_metrics[-1] if days_metrics else {}
+    scores = _compute_health_scores(today_metrics)
+    health_summary = _build_health_summary(today_metrics, scores)
+
     return {
         "health": days_metrics[-7:],
         "fitness_history": fitness_history[-7:],
         "current_fitness": fitness_raw.get("current", {}),
+        "scores": scores,
+        "health_summary": health_summary,
     }
 
 
