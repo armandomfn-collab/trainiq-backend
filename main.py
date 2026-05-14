@@ -746,29 +746,41 @@ class ChatRequest(BaseModel):
 
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
-    """Chat com o coach IA com histórico persistente e contexto do TrainingPeaks."""
+    """Chat com o coach IA com histórico persistente e contexto completo do TrainingPeaks."""
     today     = now_brt().date().isoformat()
     week_ago  = (now_brt().date() - timedelta(days=7)).isoformat()
     tomorrow  = (now_brt().date() + timedelta(days=1)).isoformat()
-
     hora_atual = now_brt().strftime("%H:%M")
 
     try:
-        metrics_raw, workouts_raw, fitness_raw, tomorrow_raw = await asyncio.gather(
+        metrics_raw, workouts_raw, fitness_raw, tomorrow_raw, week_raw = await asyncio.gather(
             tp_get_metrics(week_ago, today),
             tp_get_workouts(today, today),
             tp_get_fitness(),
             tp_get_workouts(tomorrow, tomorrow),
+            tp_get_workouts(week_ago, today),   # histórico semanal
         )
+
+        # Treinos de hoje com status computed
+        today_workouts = workouts_raw.get("workouts", [])
+        today_workouts = [{**w, "completed": _is_completed(w)} for w in today_workouts]
+
+        # Histórico semanal (últimos 7 dias) — mostra o que foi feito
+        week_workouts = week_raw.get("workouts", [])
+        week_workouts = [{**w, "completed": _is_completed(w)} for w in week_workouts]
+        # Exclui hoje (já está em treinos_hoje)
+        week_history  = [w for w in week_workouts if w.get("date", "")[:10] != today]
+
         context = {
-            "data_hoje": today,
-            "hora_atual": hora_atual,
-            "treinos_hoje": workouts_raw.get("workouts", []),
+            "data_hoje":      today,
+            "hora_atual":     hora_atual,
+            "treinos_hoje":   today_workouts,
             "treinos_amanha": tomorrow_raw.get("workouts", []),
-            "metricas": _extract_metrics_summary(metrics_raw),
-            "forma": _extract_fitness_summary(fitness_raw),
+            "historico_semana": week_history,
+            "metricas":       _extract_metrics_summary(metrics_raw),
+            "forma":          _extract_fitness_summary(fitness_raw),
         }
-    except Exception:
+    except Exception as e:
         context = {"data_hoje": today, "hora_atual": hora_atual}
 
     # Injeta perfil do atleta no contexto (se existir)

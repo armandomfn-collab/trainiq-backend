@@ -25,8 +25,7 @@ def _get_client():
 
 from services.coaching_brain import PERSONA, get_athlete_context
 
-_CHAT_SYSTEM = """
-{persona}
+_CHAT_SYSTEM = """{persona}
 
 NÚMEROS-CHAVE DO ATLETA:
 - FTP bike: 234W | Limiar FC corrida: 160bpm | CSS natação: 1:40/100m
@@ -36,39 +35,41 @@ NÚMEROS-CHAVE DO ATLETA:
 {athlete_context}
 
 MODO CHAT — COMO RESPONDER:
-- Curto e direto. Máximo 3 frases.
-- Tom de coach: prescreve, não pergunta. Usa números reais.
+- Curto e direto. Máximo 3 frases por resposta.
+- Tom de coach: prescreve, não pergunta. Usa números reais do contexto.
 - Nunca dê conselhos contraditórios na mesma resposta.
+- NUNCA peça ao atleta informações que já estão no contexto abaixo.
+
+CONTEXTO DO ATLETA — FONTE ÚNICA DA VERDADE:
+- O bloco CONTEXTO ATUAL abaixo contém TODOS os dados do dia: treinos, status, métricas, forma.
+- Use esses dados diretamente. Não pergunte "quais treinos você tem" — você já sabe.
+- Se um treino está marcado como ✓ concluído, trate como concluído. Se pendente, como pendente.
 
 AÇÕES NO TRAININGPEAKS:
 - Você tem acesso direto ao TP do atleta (athleteId: 5300597) e PODE fazer alterações reais.
 - Quando o atleta pedir ação (excluir, criar, ajustar): EXECUTE a ferramenta, depois confirme em 1 frase.
 - Nunca diga "vou fazer" sem usar a ferramenta.
-- Se precisar do workout_id: chame tp_get_workouts primeiro.
+- Para encontrar workout_id: use tp_get_workouts — mas só se o ID não estiver no contexto.
 
 RACIOCÍNIO TEMPORAL:
-- O contexto inclui a hora atual (BRT). Use-a para calcular intervalos.
+- O contexto inclui a data e hora atuais (BRT). Use para calcular intervalos.
 - Ex: corrida às 21h + pedal às 05h = 8h → insuficiente. Diz isso.
-- Nunca confunda "amanhã cedo" com "amanhã à noite" — são intervalos muito diferentes.
 - Treinos < 12h de intervalo: mencione o intervalo real em horas.
-
-TREINOS — REGRA CRÍTICA:
-- Os únicos treinos que existem são os listados no contexto (TREINOS DE HOJE / AMANHÃ).
-- NUNCA mencione treino que não esteja explicitamente no contexto.
-- Se não tiver certeza: use tp_get_workouts para verificar.
 """
 
-def _get_system_prompt() -> str:
-    """Gera o system prompt de chat — inclui hora BRT sempre."""
+def _get_system_prompt(context_str: str = "") -> str:
+    """Monta system prompt completo com persona + contexto atual injetado."""
     athlete_ctx = get_athlete_context()
     hora = _now_brt()
-    # Usa substituição simples em vez de .format() — athlete_ctx tem JSON com { }
-    return (
+    base = (
         _CHAT_SYSTEM
         .replace("{persona}", PERSONA.strip())
         .replace("{athlete_context}", athlete_ctx)
-        + f"\n\nHORA ATUAL (BRT): {hora} — use este horário em qualquer raciocínio temporal."
     )
+    base += f"\n\nHORA ATUAL (BRT): {hora}"
+    if context_str:
+        base += f"\n\n════════════════════════════════════════\nCONTEXTO ATUAL DO ATLETA (use estes dados — não pergunte ao atleta):\n════════════════════════════════════════\n{context_str}"
+    return base
 
 
 # ─── Ferramentas disponíveis ──────────────────────────────────────────────────
@@ -172,7 +173,7 @@ def _format_context(ctx: dict) -> str:
     lines.append(f"DATA/HORA ATUAL: {data} às {hora}")
     lines.append("")
 
-    # Treinos de hoje — lista explícita
+    # Treinos de hoje — lista explícita com status correto
     hoje = ctx.get("treinos_hoje", [])
     if hoje:
         lines.append("TREINOS DE HOJE (apenas estes — não invente outros):")
@@ -181,27 +182,58 @@ def _format_context(ctx: dict) -> str:
             title   = w.get("title") or "Treino"
             dur_min = int((w.get("duration_planned") or 0) * 60)
             tss     = w.get("tss_planned")
-            done    = bool(w.get("duration_actual") or w.get("tss_actual"))
-            status  = "✓ concluído" if done else "pendente"
-            tss_str = f" | TSS {tss}" if tss else ""
-            lines.append(f"  • [{sport}] {title} — {dur_min}min{tss_str} ({status})")
+            tss_str = f" | TSS planejado {round(tss)}" if tss else ""
+            # Usa campo computed 'completed' se existir, senão heurística
+            done = (
+                w.get("completed") is True
+                or w.get("type") == "completed"
+                or w.get("duration_actual") is not None
+                or bool(w.get("tss_actual"))
+                or bool(w.get("distance_actual"))
+            )
+            wid     = w.get("id", "")
+            status  = "✓ CONCLUÍDO" if done else "⏳ pendente"
+            id_str  = f" [id:{wid}]" if wid else ""
+            lines.append(f"  • [{sport}] {title} — {dur_min}min{tss_str} — {status}{id_str}")
     else:
         lines.append("TREINOS DE HOJE: nenhum treino registrado no TP.")
     lines.append("")
 
+    # Histórico da semana (dias anteriores)
+    historico = ctx.get("historico_semana", [])
+    if historico:
+        lines.append("ATIVIDADES DOS ÚLTIMOS 7 DIAS:")
+        for w in historico:
+            sport   = w.get("sport") or "?"
+            title   = w.get("title") or "Treino"
+            data    = (w.get("date") or w.get("workout_day") or "")[:10]
+            done    = w.get("completed", False)
+            dur_min = int((w.get("duration_planned") or 0) * 60)
+            dur_real = w.get("duration_actual")
+            tss_real = w.get("tss_actual")
+            status  = "✓" if done else "✗"
+            detalhes = []
+            if dur_real: detalhes.append(f"{int(dur_real/60)}min realizados")
+            if tss_real: detalhes.append(f"TSS {round(tss_real)}")
+            detalhe_str = f" ({', '.join(detalhes)})" if detalhes else f" ({dur_min}min planejado)"
+            lines.append(f"  {status} [{data}] [{sport}] {title}{detalhe_str}")
+        lines.append("")
+
     # Treinos de amanhã — lista explícita
     amanha = ctx.get("treinos_amanha", [])
     if amanha:
-        lines.append("TREINOS DE AMANHÃ (apenas estes — não invente outros):")
+        lines.append("TREINOS DE AMANHÃ:")
         for w in amanha:
             sport   = w.get("sport") or "?"
             title   = w.get("title") or "Treino"
             dur_min = int((w.get("duration_planned") or 0) * 60)
             tss     = w.get("tss_planned")
-            tss_str = f" | TSS {tss}" if tss else ""
-            lines.append(f"  • [{sport}] {title} — {dur_min}min{tss_str}")
+            wid     = w.get("id", "")
+            tss_str = f" | TSS {round(tss)}" if tss else ""
+            id_str  = f" [id:{wid}]" if wid else ""
+            lines.append(f"  • [{sport}] {title} — {dur_min}min{tss_str}{id_str}")
     else:
-        lines.append("TREINOS DE AMANHÃ: nenhum treino registrado no TP.")
+        lines.append("TREINOS DE AMANHÃ: nenhum registrado no TP.")
     lines.append("")
 
     # Forma física
@@ -228,55 +260,20 @@ def _format_context(ctx: dict) -> str:
     return "\n".join(lines)
 
 
-# ─── Classificação de intent (sem chamada de API) ─────────────────────────────
-
-_TP_KEYWORDS = {
-    # ações diretas
-    "deleta", "delete", "exclui", "exclui", "remove", "cria", "criar",
-    "move", "mover", "altera", "alterar", "atualiza", "atualizar",
-    # consultas de dados ao vivo
-    "hoje", "amanhã", "amanha", "semana", "treino", "treinos", "workout",
-    "tsb", "ctl", "atl", "hrv", "forma", "fitness", "planejado",
-    "pendente", "concluído", "concluido", "schedule", "plano",
-    "natação", "natacao", "corrida", "bike", "pedal", "swim", "run",
-}
-
-def _needs_tp_context(message: str) -> bool:
-    """Retorna True se a mensagem provavelmente precisa de dados ao vivo do TP."""
-    words = set(message.lower().split())
-    return bool(words & _TP_KEYWORDS)
-
-
 # ─── Loop agêntico ─────────────────────────────────────────────────────────────
 async def chat_with_coach(messages: list[dict], context: dict | None = None) -> str:
     """
-    Conversa com Claude em dois modos:
-    - LIGHT (Haiku): perguntas gerais de coaching, sem dados do TP
-    - FULL  (Sonnet): ações no TP ou consultas de dados ao vivo
+    Coach sempre com contexto completo (Sonnet + ferramentas TP).
+    O contexto do atleta é injetado em toda mensagem — o coach nunca precisa
+    perguntar ao atleta informações que já estão disponíveis.
     """
-    # Última mensagem do usuário para classificar o intent
-    last_user_msg = next(
-        (m["content"] for m in reversed(messages) if m["role"] == "user"), ""
-    )
-    use_tp = _needs_tp_context(str(last_user_msg))
-
-    system = _get_system_prompt()
-
-    if use_tp and context:
-        # Modo FULL: injeta contexto TP + usa Sonnet com ferramentas
-        ctx_str = _format_context(context)
-        system += f"\n\n════════════════════════════════════════\nCONTEXTO ATUAL DO ATLETA:\n════════════════════════════════════════\n{ctx_str}"
-        model  = "claude-sonnet-4-5"
-        tools  = TOOLS
-    else:
-        # Modo LIGHT: sem contexto TP, sem ferramentas — Haiku resolve
-        model = "claude-haiku-4-5"
-        tools = []
+    ctx_str = _format_context(context) if context else ""
+    system  = _get_system_prompt(ctx_str)
+    model   = "claude-sonnet-4-5"
+    tools   = TOOLS
 
     client = _get_client()
-    # Limita histórico: 8 msgs no modo light, 16 no full
-    history_limit = 16 if use_tp else 8
-    current_messages = list(messages[-history_limit:])
+    current_messages = list(messages[-20:])
 
     for _ in range(8):  # max 8 rodadas de tool calls
         kwargs: dict = dict(
