@@ -1,7 +1,12 @@
 """Auto-build athlete profile from TrainingPeaks data + stored measurements."""
 
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import timedelta, timezone
+
+_BRT = timezone(__import__("datetime").timedelta(hours=-3))
+def _now_brt():
+    from datetime import datetime
+    return datetime.now(_BRT)
 
 from tp_mcp.tools.settings import tp_get_athlete_settings
 from tp_mcp.tools.workouts import tp_get_workouts
@@ -157,8 +162,8 @@ def _merge(existing: dict, fresh: dict) -> dict:
 async def sync_profile_from_tp() -> dict:
     """Fetch TP data, analyse patterns, upsert profile. Returns saved profile."""
 
-    today      = date.today().isoformat()
-    eight_ago  = (date.today() - timedelta(days=56)).isoformat()
+    today      = _now_brt().date().isoformat()
+    eight_ago  = (_now_brt().date() - timedelta(days=56)).isoformat()
 
     # Fetch in parallel via asyncio.gather
     import asyncio

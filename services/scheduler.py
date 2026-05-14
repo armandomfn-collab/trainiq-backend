@@ -2,7 +2,11 @@
 
 import asyncio
 import json
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta, timezone as _tz
+
+_BRT = _tz(timedelta(hours=-3))
+def _now_brt() -> datetime:
+    return datetime.now(_BRT)
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -32,8 +36,8 @@ async def run_daily_analysis():
         from tp_mcp.tools.fitness import tp_get_fitness
         from services.ai import analyze_athlete_data
 
-        today = date.today().isoformat()
-        week_ago = (date.today() - timedelta(days=7)).isoformat()
+        today = _now_brt().date().isoformat()
+        week_ago = (_now_brt().date() - timedelta(days=7)).isoformat()
 
         metrics_raw = await tp_get_metrics(week_ago, today)
         workouts_raw = await tp_get_workouts(today, today)
@@ -63,7 +67,7 @@ async def run_daily_analysis():
         emoji = "🟢" if nivel == "alto" else "🟡" if nivel == "moderado" else "🔴"
 
         await send_push_notification(
-            title=f"{emoji} Análise do dia — {date.today().strftime('%d/%m')}",
+            title=f"{emoji} Análise do dia — {_now_brt().date().strftime('%d/%m')}",
             body=f"HRV {int(hrv)} · TSB {int(tsb)} · Melhor horário: {horario}",
             data={"type": "daily_analysis", "analysis": json.dumps(analysis)},
         )
@@ -82,8 +86,8 @@ async def check_completed_workouts():
         from tp_mcp.tools.fitness import tp_get_fitness
         from services.workout_review import generate_workout_review
 
-        today = date.today().isoformat()
-        week_ago = (date.today() - timedelta(days=7)).isoformat()
+        today = _now_brt().date().isoformat()
+        week_ago = (_now_brt().date() - timedelta(days=7)).isoformat()
 
         workouts_raw = await tp_get_workouts(today, today)
         all_w = workouts_raw.get("workouts", [])
@@ -194,7 +198,7 @@ async def check_livetrack_email():
         coach = None
         RUN_SPORTS = {"run", "running", "corrida"}
         try:
-            today = date.today().isoformat()
+            today = _now_brt().date().isoformat()
             workouts_raw = await tp_get_workouts(today, today)
             workouts = workouts_raw.get("workouts", [])
             if workouts:

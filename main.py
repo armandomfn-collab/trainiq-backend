@@ -107,8 +107,8 @@ def health():
 
 @app.get("/api/dashboard")
 async def get_dashboard():
-    today = date.today().isoformat()
-    week_ago = (date.today() - timedelta(days=7)).isoformat()
+    today = now_brt().date().isoformat()
+    week_ago = (now_brt().date() - timedelta(days=7)).isoformat()
 
     metrics_raw, workouts_raw, fitness_raw = await asyncio.gather(
         tp_get_metrics(week_ago, today),
@@ -127,8 +127,8 @@ async def get_dashboard():
 @app.get("/api/metrics/history")
 async def get_metrics_history():
     """Retorna 7 dias de métricas para sparklines (HRV, sono, body battery, FC repouso, CTL, ATL, TSB)."""
-    today = date.today().isoformat()
-    week_ago = (date.today() - timedelta(days=7)).isoformat()
+    today = now_brt().date().isoformat()
+    week_ago = (now_brt().date() - timedelta(days=7)).isoformat()
 
     metrics_raw, fitness_raw = await asyncio.gather(
         tp_get_metrics(week_ago, today),
@@ -163,7 +163,7 @@ async def get_metrics_history():
 @app.get("/api/workout/blocks/{workout_id}")
 async def get_workout_blocks(workout_id: str):
     """Parseia a descrição de um treino do TP em blocos estruturados."""
-    today = date.today().isoformat()
+    today = now_brt().date().isoformat()
     workouts_raw = await tp_get_workouts(today, today)
     workouts = workouts_raw.get("workouts", [])
     workout = next((w for w in workouts if str(w.get("id")) == str(workout_id)), None)
@@ -180,8 +180,8 @@ async def get_workout_blocks(workout_id: str):
 
 @app.get("/api/analysis")
 async def get_analysis():
-    today = date.today().isoformat()
-    week_ago = (date.today() - timedelta(days=7)).isoformat()
+    today = now_brt().date().isoformat()
+    week_ago = (now_brt().date() - timedelta(days=7)).isoformat()
 
     metrics_raw, workouts_raw, fitness_raw = await asyncio.gather(
         tp_get_metrics(week_ago, today),
@@ -221,8 +221,7 @@ class ScheduleRequest(BaseModel):
 @app.get("/api/schedule/workouts")
 async def get_schedule_workouts(date: str | None = None):
     """Retorna os treinos de uma data para montar o cronograma."""
-    from datetime import date as dt
-    target = date or (dt.today() + timedelta(days=1)).isoformat()
+    target = date or (now_brt().date() + timedelta(days=1)).isoformat()
     workouts_raw = await tp_get_workouts(target, target)
     workouts = workouts_raw.get("workouts", [])
 
@@ -247,8 +246,8 @@ async def get_schedule_workouts(date: str | None = None):
 @app.post("/api/schedule/confirm")
 async def confirm_schedule(req: ScheduleRequest):
     """Recebe o cronograma confirmado e retorna recomendacoes adaptadas."""
-    today = date.today().isoformat()
-    week_ago = (date.today() - timedelta(days=7)).isoformat()
+    today = now_brt().date().isoformat()
+    week_ago = (now_brt().date() - timedelta(days=7)).isoformat()
 
     metrics_raw, fitness_raw = await asyncio.gather(
         tp_get_metrics(week_ago, today),
@@ -316,9 +315,9 @@ async def create_workout(req: CreateWorkoutRequest):
 @app.get("/api/daily-summary")
 async def get_daily_summary():
     """Retorna status dos treinos do dia + feedback IA + preview de amanha."""
-    today = date.today().isoformat()
-    tomorrow = (date.today() + timedelta(days=1)).isoformat()
-    week_ago = (date.today() - timedelta(days=7)).isoformat()
+    today = now_brt().date().isoformat()
+    tomorrow = (now_brt().date() + timedelta(days=1)).isoformat()
+    week_ago = (now_brt().date() - timedelta(days=7)).isoformat()
 
     all_raw, tomorrow_raw, metrics_raw, fitness_raw = await asyncio.gather(
         tp_get_workouts(today, today),
@@ -370,8 +369,8 @@ async def get_daily_summary():
 @app.get("/api/workout-review/{workout_id}")
 async def get_workout_review(workout_id: str):
     """Retorna o review de um treino concluído."""
-    today = date.today().isoformat()
-    week_ago = (date.today() - timedelta(days=7)).isoformat()
+    today = now_brt().date().isoformat()
+    week_ago = (now_brt().date() - timedelta(days=7)).isoformat()
 
     workouts_raw, metrics_raw, fitness_raw = await asyncio.gather(
         tp_get_workouts(today, today, type="completed"),
@@ -709,9 +708,9 @@ async def get_body_analysis():
     if not measurements:
         return {"analysis": None, "message": "Registre ao menos uma medicao para receber analise."}
 
-    four_weeks_ago = (date.today() - timedelta(days=28)).isoformat()
+    four_weeks_ago = (now_brt().date() - timedelta(days=28)).isoformat()
     workouts_raw, fitness_raw = await asyncio.gather(
-        tp_get_workouts(four_weeks_ago, date.today().isoformat()),
+        tp_get_workouts(four_weeks_ago, now_brt().date().isoformat()),
         tp_get_fitness(),
     )
     workouts  = workouts_raw.get("workouts", [])
@@ -735,9 +734,9 @@ class ChatRequest(BaseModel):
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
     """Chat com o coach IA com histórico persistente e contexto do TrainingPeaks."""
-    today     = date.today().isoformat()
-    week_ago  = (date.today() - timedelta(days=7)).isoformat()
-    tomorrow  = (date.today() + timedelta(days=1)).isoformat()
+    today     = now_brt().date().isoformat()
+    week_ago  = (now_brt().date() - timedelta(days=7)).isoformat()
+    tomorrow  = (now_brt().date() + timedelta(days=1)).isoformat()
 
     hora_atual = now_brt().strftime("%H:%M")
 
