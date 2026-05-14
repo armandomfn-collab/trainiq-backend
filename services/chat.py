@@ -2,7 +2,13 @@
 
 import os
 import json
+from datetime import datetime, timezone, timedelta
 import anthropic
+
+def _now_brt() -> str:
+    """Hora atual em BRT (UTC-3) formatada."""
+    brt = timezone(timedelta(hours=-3))
+    return datetime.now(brt).strftime("%H:%M")
 
 from tp_mcp.tools.workouts import (
     tp_get_workouts,
@@ -53,13 +59,15 @@ TREINOS — REGRA CRÍTICA:
 """
 
 def _get_system_prompt() -> str:
-    """Gera o system prompt de chat — leve, focado em conversa."""
+    """Gera o system prompt de chat — inclui hora BRT sempre."""
     athlete_ctx = get_athlete_context()
+    hora = _now_brt()
     # Usa substituição simples em vez de .format() — athlete_ctx tem JSON com { }
     return (
         _CHAT_SYSTEM
         .replace("{persona}", PERSONA.strip())
         .replace("{athlete_context}", athlete_ctx)
+        + f"\n\nHORA ATUAL (BRT): {hora} — use este horário em qualquer raciocínio temporal."
     )
 
 
