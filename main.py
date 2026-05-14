@@ -40,6 +40,7 @@ from services.workout_review import generate_workout_review
 from services.daily_feedback import generate_daily_feedback
 from services.schedule_gen import adapt_schedule
 from services.chat import chat_with_coach
+from services.alert_extractor import extract_and_update_alerts
 from services.livetrack import parse_livetrack_url, LiveTrackSession, get_current, set_current
 from services.workout_coach import parse_workout_into_blocks, WorkoutCoach
 
@@ -791,6 +792,9 @@ async def chat(req: ChatRequest):
     # Salva mensagem do usuário
     save_chat_message("user", req.message)
 
+    # Extrai alertas da mensagem em background (não bloqueia resposta)
+    asyncio.create_task(extract_and_update_alerts(req.message))
+
     # Monta histórico completo para o Claude (últimas 40 msgs)
     messages = get_chat_history(limit=40)
 
@@ -806,6 +810,21 @@ async def chat(req: ChatRequest):
 async def chat_history():
     """Retorna o histórico completo do chat."""
     return {"history": get_chat_history(limit=60)}
+
+
+@app.get("/api/athlete/alerts")
+async def get_alerts():
+    """Retorna alertas ativos do atleta (lesões, dores, etc.)."""
+    from services.database import get_active_alerts
+    return {"alerts": get_active_alerts()}
+
+
+@app.post("/api/athlete/alerts/{alert_id}/resolve")
+async def resolve_alert_endpoint(alert_id: int):
+    """Resolve (descarta) um alerta manualmente."""
+    from services.database import resolve_alert
+    resolve_alert(alert_id)
+    return {"success": True}
 
 
 @app.delete("/api/chat/history")

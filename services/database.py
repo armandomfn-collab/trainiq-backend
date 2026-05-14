@@ -63,6 +63,18 @@ def init_db():
                 created_at TEXT DEFAULT (datetime('now'))
             );
 
+            CREATE TABLE IF NOT EXISTS athlete_alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category TEXT NOT NULL,
+                body_part TEXT,
+                description TEXT NOT NULL,
+                severity TEXT DEFAULT 'moderate',
+                status TEXT DEFAULT 'active',
+                first_reported TEXT DEFAULT (datetime('now')),
+                last_updated TEXT DEFAULT (datetime('now')),
+                last_asked TEXT
+            );
+
             CREATE TABLE IF NOT EXISTS athlete_profile (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 name TEXT,
@@ -180,6 +192,66 @@ def get_chat_history(limit: int = 40) -> list[dict]:
 def clear_chat_history():
     with get_db() as conn:
         conn.execute("DELETE FROM chat_messages")
+
+
+# ─── Athlete alerts (lesões, dores, eventos significativos) ───────────────────
+
+def get_active_alerts() -> list[dict]:
+    """Retorna todos os alertas ativos do atleta."""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM athlete_alerts WHERE status != 'resolved' ORDER BY last_updated DESC"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def upsert_alert(category: str, body_part: str | None, description: str,
+                 severity: str = "moderate") -> int:
+    """Cria ou atualiza um alerta. Usa body_part+category como chave de deduplicação."""
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT id FROM athlete_alerts WHERE category=? AND body_part=? AND status!='resolved'",
+            (category, body_part or "")
+        ).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE athlete_alerts SET description=?, severity=?, last_updated=datetime('now') WHERE id=?",
+                (description, severity, existing["id"])
+            )
+            return existing["id"]
+        else:
+            cur = conn.execute(
+                "INSERT INTO athlete_alerts (category, body_part, description, severity) VALUES (?,?,?,?)",
+                (category, body_part or "", description, severity)
+            )
+            return cur.lastrowid
+
+
+def resolve_alert(alert_id: int):
+    """Marca um alerta como resolvido."""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE athlete_alerts SET status='resolved', last_updated=datetime('now') WHERE id=?",
+            (alert_id,)
+        )
+
+
+def mark_alert_asked(alert_id: int):
+    """Registra que o coach perguntou sobre esse alerta agora."""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE athlete_alerts SET last_asked=datetime('now') WHERE id=?",
+            (alert_id,)
+        )
+
+
+def resolve_alert_by_key(category: str, body_part: str):
+    """Resolve alerta por category+body_part."""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE athlete_alerts SET status='resolved', last_updated=datetime('now') WHERE category=? AND body_part=? AND status!='resolved'",
+            (category, body_part or "")
+        )
 
 
 # ─── Athlete profile ──────────────────────────────────────────────────────────

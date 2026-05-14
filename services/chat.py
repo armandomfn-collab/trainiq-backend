@@ -24,6 +24,8 @@ def _get_client():
 
 
 from services.coaching_brain import PERSONA, get_athlete_context
+from services.database import get_active_alerts
+from services.alert_extractor import format_alerts_for_context
 
 _CHAT_SYSTEM = """{persona}
 
@@ -58,7 +60,7 @@ RACIOCÍNIO TEMPORAL:
 """
 
 def _get_system_prompt(context_str: str = "") -> str:
-    """Monta system prompt completo com persona + contexto atual injetado."""
+    """Monta system prompt completo com persona + alertas + contexto atual."""
     athlete_ctx = get_athlete_context()
     hora = _now_brt()
     base = (
@@ -67,6 +69,13 @@ def _get_system_prompt(context_str: str = "") -> str:
         .replace("{athlete_context}", athlete_ctx)
     )
     base += f"\n\nHORA ATUAL (BRT): {hora}"
+
+    # Alertas ativos — sempre incluídos, têm prioridade máxima
+    alerts = get_active_alerts()
+    if alerts:
+        alerts_str = format_alerts_for_context(alerts)
+        base += f"\n\n════════════════════════════════════════\n{alerts_str}\n════════════════════════════════════════"
+
     if context_str:
         base += f"\n\n════════════════════════════════════════\nCONTEXTO ATUAL DO ATLETA (use estes dados — não pergunte ao atleta):\n════════════════════════════════════════\n{context_str}"
     return base
