@@ -227,30 +227,9 @@ async def check_livetrack_email():
 
 
 def start_scheduler():
-    """Inicializa o scheduler com os jobs."""
-    # Análise diária às 6h horário de Brasília (UTC-3)
-    scheduler.add_job(
-        run_daily_analysis,
-        CronTrigger(hour=6, minute=0, timezone="America/Sao_Paulo"),
-        id="daily_analysis",
-        replace_existing=True,
-    )
-
-    # Verificação de treinos concluídos a cada 30min
-    scheduler.add_job(
-        check_completed_workouts,
-        IntervalTrigger(minutes=30),
-        id="check_workouts",
-        replace_existing=True,
-    )
-
-    # Monitoramento de email do Garmin LiveTrack a cada 5min
-    scheduler.add_job(
-        check_livetrack_email,
-        IntervalTrigger(minutes=5),
-        id="livetrack_email",
-        replace_existing=True,
-    )
-
+    """EMERGENCY MODE — todos os jobs desabilitados para conter consumo de API."""
+    # DESABILITADO: run_daily_analysis (Claude Opus, 1x/dia às 6h)
+    # DESABILITADO: check_completed_workouts (Claude Sonnet, a cada 30min)
+    # DESABILITADO: check_livetrack_email (IMAP Gmail, a cada 5min)
     scheduler.start()
-    print("Scheduler iniciado - analise as 6h, treinos a cada 30min, LiveTrack email a cada 2min")
+    print("⚠️  Scheduler em modo emergencial — todos os jobs suspensos.")
