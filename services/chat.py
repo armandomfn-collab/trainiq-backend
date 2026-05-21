@@ -62,14 +62,15 @@ CRIANDO TREINOS ESTRUTURADOS (blocos/intervalos):
 - Zonas de corrida (% pace limiar): Z1<75, Z2=76-85, Z3=86-95, Z4=96-105, Z5>105
 - intensityClass: "warmUp" (aquecimento), "active" (esforço), "rest" (recuperação), "coolDown" (volta à calma)
 - Para repetições: use type="repetition" com reps e steps internos.
-- Exemplo de 6x3min Z4 bike com recuperação 2min:
+- CRÍTICO: crie APENAS os blocos que o atleta pediu explicitamente. Não adicione aquecimento, volta à calma ou recuperação que não foram solicitados.
+- Se pediu "6x3min Z4": crie só o bloco de repetição. Sem aquecimento, sem cooldown.
+- Se pediu "aquecimento + 6x3min + volta à calma": crie os três.
+- Exemplo de apenas 6x3min Z4 bike (sem nada a mais):
   steps: [
-    {name:"Aquecimento", duration_seconds:600, intensity_min:50, intensity_max:65, intensityClass:"warmUp"},
     {type:"repetition", name:"6x3min Z4", reps:6, steps:[
       {name:"Tiro Z4", duration_seconds:180, intensity_min:91, intensity_max:105, intensityClass:"active"},
       {name:"Recuperação", duration_seconds:120, intensity_min:50, intensity_max:60, intensityClass:"rest"}
-    ]},
-    {name:"Volta à calma", duration_seconds:600, intensity_min:45, intensity_max:55, intensityClass:"coolDown"}
+    ]}
   ]
 
 RACIOCÍNIO TEMPORAL:
