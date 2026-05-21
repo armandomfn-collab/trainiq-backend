@@ -53,6 +53,25 @@ AÇÕES NO TRAININGPEAKS:
 - Nunca diga "vou fazer" sem usar a ferramenta.
 - Para encontrar workout_id: use tp_get_workouts — mas só se o ID não estiver no contexto.
 
+CRIANDO TREINOS ESTRUTURADOS (blocos/intervalos):
+- Sempre que o atleta pedir treino com blocos, intervalos, aquecimento+tiros+volta à calma: use o campo 'structure' no tp_create_workout.
+- NÃO coloque os blocos apenas na description — isso não cria estrutura real no TP.
+- Bike/Zwift → primaryIntensityMetric: "percentOfFtp" | Corrida → "percentOfThresholdPace"
+- FTP do atleta: 234W. Limiar corrida: 160bpm / pace ~4:40/km.
+- Zonas de bike (% FTP): Z1<55, Z2=56-75, Z3=76-90, Z4=91-105, Z5>105
+- Zonas de corrida (% pace limiar): Z1<75, Z2=76-85, Z3=86-95, Z4=96-105, Z5>105
+- intensityClass: "warmUp" (aquecimento), "active" (esforço), "rest" (recuperação), "coolDown" (volta à calma)
+- Para repetições: use type="repetition" com reps e steps internos.
+- Exemplo de 6x3min Z4 bike com recuperação 2min:
+  steps: [
+    {name:"Aquecimento", duration_seconds:600, intensity_min:50, intensity_max:65, intensityClass:"warmUp"},
+    {type:"repetition", name:"6x3min Z4", reps:6, steps:[
+      {name:"Tiro Z4", duration_seconds:180, intensity_min:91, intensity_max:105, intensityClass:"active"},
+      {name:"Recuperação", duration_seconds:120, intensity_min:50, intensity_max:60, intensityClass:"rest"}
+    ]},
+    {name:"Volta à calma", duration_seconds:600, intensity_min:45, intensity_max:55, intensityClass:"coolDown"}
+  ]
+
 RACIOCÍNIO TEMPORAL:
 - O contexto inclui a data e hora atuais (BRT). Use para calcular intervalos.
 - Ex: corrida às 21h + pedal às 05h = 8h → insuficiente. Diz isso.
@@ -108,7 +127,7 @@ TOOLS = [
     },
     {
         "name": "tp_update_workout",
-        "description": "Atualiza campos de um treino existente (título, duração, TSS, data, descrição).",
+        "description": "Atualiza campos de um treino existente (título, duração, TSS, data, descrição, estrutura de blocos).",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -118,22 +137,57 @@ TOOLS = [
                 "tss_planned":      {"type": "number", "description": "Novo TSS planejado"},
                 "description":      {"type": "string", "description": "Nova descrição"},
                 "date":             {"type": "string", "description": "Nova data YYYY-MM-DD"},
+                "structure": {
+                    "type": "object",
+                    "description": "Nova estrutura de blocos. Mesmo formato do tp_create_workout.",
+                    "properties": {
+                        "primaryIntensityMetric": {"type": "string"},
+                        "steps": {"type": "array", "items": {"type": "object"}}
+                    }
+                },
             },
             "required": ["workout_id"],
         },
     },
     {
         "name": "tp_create_workout",
-        "description": "Cria um novo treino no TrainingPeaks.",
+        "description": (
+            "Cria um novo treino no TrainingPeaks. "
+            "Para treinos estruturados com blocos (intervalos, aquecimento, tiros), use o campo 'structure'. "
+            "structure.primaryIntensityMetric: 'percentOfFtp' (bike/zwift) ou 'percentOfThresholdPace' (corrida). "
+            "structure.steps: lista de steps ou repetition blocks. "
+            "Step: {name, duration_seconds, intensity_min, intensity_max, intensityClass}. "
+            "intensityClass: 'warmUp' | 'active' | 'rest' | 'coolDown'. "
+            "Repetition block: {type:'repetition', name, reps, steps:[...]}. "
+            "intensity_min/max = % do FTP (bike) ou % do pace limiar (corrida). "
+            "Exemplo bike Z4: intensity_min=91, intensity_max=105. "
+            "Exemplo corrida Z3: intensity_min=88, intensity_max=95. "
+            "SEMPRE use structure para treinos com blocos — não coloque os blocos apenas na description."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "date_str":         {"type": "string",  "description": "Data YYYY-MM-DD"},
                 "sport":            {"type": "string",  "description": "Swim | Bike | Run | Strength | Walk | Brick"},
                 "title":            {"type": "string",  "description": "Título do treino"},
-                "duration_minutes": {"type": "integer", "description": "Duração em minutos"},
-                "tss_planned":      {"type": "number",  "description": "TSS planejado"},
-                "description":      {"type": "string",  "description": "Descrição"},
+                "duration_minutes": {"type": "integer", "description": "Duração em minutos (calculado automaticamente se structure fornecido)"},
+                "tss_planned":      {"type": "number",  "description": "TSS planejado (calculado automaticamente se structure fornecido)"},
+                "description":      {"type": "string",  "description": "Descrição textual do treino"},
+                "structure": {
+                    "type": "object",
+                    "description": "Estrutura de blocos do treino. Use para criar treinos com intervalos reais no TP.",
+                    "properties": {
+                        "primaryIntensityMetric": {
+                            "type": "string",
+                            "description": "'percentOfFtp' para bike/zwift, 'percentOfThresholdPace' para corrida"
+                        },
+                        "steps": {
+                            "type": "array",
+                            "description": "Lista de steps e repetition blocks",
+                            "items": {"type": "object"}
+                        }
+                    }
+                },
             },
             "required": ["date_str", "sport", "title"],
         },
