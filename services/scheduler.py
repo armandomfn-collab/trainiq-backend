@@ -231,9 +231,22 @@ async def check_livetrack_email():
 
 
 def start_scheduler():
-    """EMERGENCY MODE — todos os jobs desabilitados para conter consumo de API."""
-    # DESABILITADO: run_daily_analysis (Claude Opus, 1x/dia às 6h)
-    # DESABILITADO: check_completed_workouts (Claude Sonnet, a cada 30min)
-    # DESABILITADO: check_livetrack_email (IMAP Gmail, a cada 5min)
+    """Inicia o scheduler com jobs essenciais."""
+    # Briefing matinal às 05:05 BRT (após o atleta acordar às 04h e se preparar)
+    scheduler.add_job(
+        run_daily_analysis,
+        CronTrigger(hour=5, minute=5, timezone="America/Sao_Paulo"),
+        id="daily_analysis",
+        replace_existing=True,
+    )
+    # Revisão pós-treino a cada 15min
+    scheduler.add_job(
+        check_completed_workouts,
+        IntervalTrigger(minutes=15),
+        id="workout_review",
+        replace_existing=True,
+    )
+    # LiveTrack email: DESABILITADO (IMAP Gmail, usa cota)
+    # scheduler.add_job(check_livetrack_email, ...)
     scheduler.start()
-    print("⚠️  Scheduler em modo emergencial — todos os jobs suspensos.")
+    print("✅ Scheduler iniciado: briefing 05h05 + review pós-treino a cada 15min.")

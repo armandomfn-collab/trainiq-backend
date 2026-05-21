@@ -276,6 +276,38 @@ def health():
     }
 
 
+@app.get("/api/week")
+async def get_week():
+    """Retorna treinos dos próximos 7 dias (hoje -1 até hoje +5) agrupados por dia."""
+    today = now_brt().date()
+    start = (today - timedelta(days=1)).isoformat()
+    end   = (today + timedelta(days=5)).isoformat()
+
+    workouts_raw = await tp_get_workouts(start, end)
+    all_w = workouts_raw.get("workouts", [])
+
+    DAY_NAMES = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+    days = []
+    for i in range(-1, 6):
+        d = today + timedelta(days=i)
+        day_w = [w for w in all_w if (w.get("date") or w.get("workout_day") or "")[:10] == d.isoformat()]
+        day_w = [{**w, "completed": _is_completed(w)} for w in day_w]
+        tss_total = sum(
+            (w.get("tss_actual") or w.get("tss_planned") or 0)
+            for w in day_w
+        )
+        days.append({
+            "date":      d.isoformat(),
+            "day_label": DAY_NAMES[d.weekday()],
+            "day_num":   d.day,
+            "is_today":  d == today,
+            "workouts":  day_w,
+            "tss_total": round(tss_total),
+        })
+
+    return {"days": days, "start": start, "end": end}
+
+
 @app.get("/api/dashboard")
 async def get_dashboard():
     today = now_brt().date().isoformat()
