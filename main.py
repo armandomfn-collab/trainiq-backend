@@ -569,21 +569,32 @@ async def get_daily_summary():
 
 @app.get("/api/workout-review/{workout_id}")
 async def get_workout_review(workout_id: str):
-    """Retorna o review de um treino concluído."""
-    today = now_brt().date().isoformat()
-    week_ago = (now_brt().date() - timedelta(days=7)).isoformat()
+    """Gera e retorna o review de um treino concluído (chamado manualmente pelo atleta)."""
+    today = now_brt().date()
+    yesterday = (today - timedelta(days=1)).isoformat()
+    today_str = today.isoformat()
+    week_ago = (today - timedelta(days=7)).isoformat()
 
+    # Busca últimos 2 dias para pegar treinos de ontem também
     workouts_raw, metrics_raw, fitness_raw = await asyncio.gather(
-        tp_get_workouts(today, today, type="completed"),
-        tp_get_metrics(week_ago, today),
+        tp_get_workouts(yesterday, today_str),
+        tp_get_metrics(week_ago, today_str),
         tp_get_fitness(),
     )
 
     workouts = workouts_raw.get("workouts", [])
-    workout = next((w for w in workouts if w["id"] == workout_id), None)
+    workout = next((w for w in workouts if str(w.get("id", "")) == str(workout_id)), None)
 
     if not workout:
-        raise HTTPException(status_code=404, detail="Treino não encontrado ou não concluído")
+        raise HTTPException(status_code=404, detail="Treino não encontrado")
+
+    # Verifica se o treino tem dados reais (foi concluído)
+    has_actual = any(
+        workout.get(f) not in (None, 0)
+        for f in ["distance_actual", "duration_actual", "tss_actual"]
+    )
+    if not has_actual:
+        raise HTTPException(status_code=422, detail="Treino ainda não foi concluído — sem dados reais para avaliar")
 
     metrics = _extract_metrics_summary(metrics_raw)
     fitness = _extract_fitness_summary(fitness_raw)

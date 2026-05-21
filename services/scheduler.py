@@ -239,14 +239,12 @@ def start_scheduler():
         id="daily_analysis",
         replace_existing=True,
     )
-    # Revisão pós-treino a cada 15min
-    scheduler.add_job(
-        check_completed_workouts,
-        IntervalTrigger(minutes=15),
-        id="workout_review",
-        replace_existing=True,
-    )
+    # Revisão pós-treino: DESABILITADO — atleta solicita manualmente via botão no app
+    # Motivo: polling 96x/dia na TP API + risco de double-processing após redeploy
+    # O endpoint GET /api/workout-review/{id} está disponível para chamada on-demand
+    # scheduler.add_job(check_completed_workouts, IntervalTrigger(minutes=15), ...)
+
     # LiveTrack email: DESABILITADO (IMAP Gmail, usa cota)
     # scheduler.add_job(check_livetrack_email, ...)
     scheduler.start()
-    print("✅ Scheduler iniciado: briefing 05h05 + review pós-treino a cada 15min.")
+    print("✅ Scheduler iniciado: apenas briefing matinal 05h05 (review pós-treino = on-demand).")
