@@ -1236,6 +1236,161 @@ async def livetrack_stop():
     return {"success": True}
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Coach endpoints  (TrainIQ Coach desktop app)
+# Usa a conta trainq (coach) para acessar dados dos atletas gerenciados.
+# athlete_id é o ID numérico do atleta no TrainingPeaks.
+# ──────────────────────────────────────────────────────────────────────────────
+
+from tp_mcp.client.context import athlete_override
+import contextvars
+
+
+def _set_athlete(athlete_id: str) -> contextvars.Token:
+    """Define o atleta alvo no contexto do tp_mcp e retorna o token para reset."""
+    return athlete_override.set(athlete_id)
+
+
+def _reset_athlete(token: contextvars.Token) -> None:
+    athlete_override.reset(token)
+
+
+@app.get("/api/coach/athletes")
+async def coach_list_athletes():
+    """Lista os atletas gerenciados pela conta trainq."""
+    client = TPClient()
+    user_data = await client._get_user_data()
+    if not user_data:
+        raise HTTPException(status_code=401, detail="Não autenticado")
+    athletes = user_data.get("athletes", [])
+    return {
+        "athletes": [
+            {
+                "athleteId": a.get("athleteId"),
+                "firstName": a.get("firstName", ""),
+                "lastName": a.get("lastName", ""),
+                "email": a.get("email", ""),
+                "sport": a.get("primarySport", "triathlon"),
+            }
+            for a in athletes
+        ]
+    }
+
+
+@app.get("/api/coach/athlete/{athlete_id}/dashboard")
+async def coach_athlete_dashboard(athlete_id: str):
+    """Dashboard de um atleta específico (treinos de hoje + fitness + métricas)."""
+    token = _set_athlete(athlete_id)
+    try:
+        today = now_brt().date().isoformat()
+        week_ago = (now_brt().date() - timedelta(days=7)).isoformat()
+
+        metrics_raw, workouts_raw, fitness_raw = await asyncio.gather(
+            tp_get_metrics(week_ago, today),
+            tp_get_workouts(today, today),
+            tp_get_fitness(),
+        )
+
+        raw_workouts = workouts_raw.get("workouts", [])
+        workouts = [{**w, "completed": _is_completed(w)} for w in raw_workouts]
+
+        return {
+            "date": today,
+            "metrics": _extract_metrics_summary(metrics_raw),
+            "fitness": _extract_fitness_summary(fitness_raw),
+            "today_workouts": workouts,
+        }
+    finally:
+        _reset_athlete(token)
+
+
+@app.get("/api/coach/athlete/{athlete_id}/week")
+async def coach_athlete_week(athlete_id: str):
+    """Treinos da semana (hoje -1 até +5) para um atleta específico."""
+    token = _set_athlete(athlete_id)
+    try:
+        today = now_brt().date()
+        start = (today - timedelta(days=1)).isoformat()
+        end = (today + timedelta(days=5)).isoformat()
+
+        workouts_raw = await tp_get_workouts(start, end)
+        all_w = workouts_raw.get("workouts", [])
+
+        days = []
+        for i in range(-1, 6):
+            d = today + timedelta(days=i)
+            day_w = [w for w in all_w if (w.get("date") or w.get("workout_day") or "")[:10] == d.isoformat()]
+            day_w = [{**w, "completed": _is_completed(w)} for w in day_w]
+            days.append({
+                "date": d.isoformat(),
+                "workouts": day_w,
+            })
+
+        return days
+    finally:
+        _reset_athlete(token)
+
+
+@app.get("/api/coach/athlete/{athlete_id}/fitness")
+async def coach_athlete_fitness(athlete_id: str):
+    """CTL/ATL/TSB de um atleta específico."""
+    token = _set_athlete(athlete_id)
+    try:
+        fitness_raw = await tp_get_fitness()
+        return fitness_raw.get("current", {})
+    finally:
+        _reset_athlete(token)
+
+
+@app.get("/api/coach/athlete/{athlete_id}/metrics/history")
+async def coach_athlete_metrics(athlete_id: str):
+    """Histórico de métricas (HRV, sono, body battery, FC) de um atleta."""
+    token = _set_athlete(athlete_id)
+    try:
+        today = now_brt().date().isoformat()
+        week_ago = (now_brt().date() - timedelta(days=14)).isoformat()
+        metrics_raw = await tp_get_metrics(week_ago, today)
+
+        days = []
+        for entry in metrics_raw.get("metrics", []):
+            day = entry.get("date", "")[:10]
+            row: dict = {"date": day}
+            for detail in entry.get("details", []):
+                label = detail.get("label", "")
+                val = detail.get("value")
+                if label in ("HRV", "Sleep Hours", "Body Battery", "Resting Heart Rate") and val is not None:
+                    if isinstance(val, list):
+                        val = val[2] if len(val) > 2 else val[-1]
+                    row[label] = round(float(val), 1)
+            days.append(row)
+
+        return {"history": days[-14:]}
+    finally:
+        _reset_athlete(token)
+
+
+class CoachChatRequest(BaseModel):
+    message: str
+    athlete_context: list[dict] | None = None
+
+
+@app.post("/api/coach/chat")
+async def coach_chat(req: CoachChatRequest):
+    """Chat IA multi-atleta para o treinador."""
+    from services.chat import chat_with_coach
+    from services.database import get_chat_history
+
+    context: dict = {"role": "coach", "athletes": req.athlete_context or []}
+
+    # Busca histórico do banco (últimas 20 mensagens)
+    history = get_chat_history()
+    messages = [{"role": m["role"], "content": m["content"]} for m in history[-19:]]
+    messages.append({"role": "user", "content": req.message})
+
+    reply = await chat_with_coach(messages=messages, context=context)
+    return {"reply": reply}
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
