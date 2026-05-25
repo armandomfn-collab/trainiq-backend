@@ -68,6 +68,12 @@ async def startup():
 # Helpers
 # ──────────────────────────────────────────────
 
+# TP renomeou alguns labels — normalizamos para os nomes que o app espera.
+_METRIC_LABEL_ALIASES = {
+    "Pulse": "Resting Heart Rate",
+}
+
+
 def _extract_metrics_summary(metrics_data: dict) -> dict:
     result: dict[str, Any] = {}
     metrics = metrics_data.get("metrics", [])
@@ -78,7 +84,8 @@ def _extract_metrics_summary(metrics_data: dict) -> dict:
         label = detail.get("label", "")
         value = detail.get("value")
         if label and value is not None:
-            result[label] = value
+            canonical = _METRIC_LABEL_ALIASES.get(label, label)
+            result[canonical] = value
     return result
 
 
@@ -349,6 +356,7 @@ async def get_metrics_history():
         for detail in entry.get("details", []):
             label = detail.get("label", "")
             val   = detail.get("value")
+            label = _METRIC_LABEL_ALIASES.get(label, label)
             if label in ("HRV", "Sleep Hours", "Body Battery", "Resting Heart Rate") and val is not None:
                 # Body Battery vem como [min, max, avg] — pega avg
                 if isinstance(val, list):
@@ -1358,7 +1366,8 @@ async def coach_athlete_metrics(athlete_id: str):
             for detail in entry.get("details", []):
                 label = detail.get("label", "")
                 val = detail.get("value")
-                if label in ("HRV", "Sleep Hours", "Body Battery", "Resting Heart Rate") and val is not None:
+                label = _METRIC_LABEL_ALIASES.get(label, label)
+            if label in ("HRV", "Sleep Hours", "Body Battery", "Resting Heart Rate") and val is not None:
                     if isinstance(val, list):
                         val = val[2] if len(val) > 2 else val[-1]
                     row[label] = round(float(val), 1)

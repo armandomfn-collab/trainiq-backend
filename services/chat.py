@@ -311,7 +311,7 @@ def _format_context(ctx: dict) -> str:
     if metr:
         hrv    = metr.get("HRV") or metr.get("hrv") or metr.get("HRV Status")
         bb     = metr.get("Body Battery") or metr.get("body_battery")
-        hr_rep = metr.get("Resting Heart Rate") or metr.get("resting_hr")
+        hr_rep = metr.get("Resting Heart Rate") or metr.get("Pulse") or metr.get("resting_hr")
         sono   = metr.get("Sleep") or metr.get("sleep_hours")
         partes = []
         if hrv:    partes.append(f"HRV {hrv}")
