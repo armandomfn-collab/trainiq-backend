@@ -13,6 +13,7 @@ def _now_brt() -> str:
 from tp_mcp.tools.workouts import (
     tp_get_workouts,
     tp_get_workout,
+    tp_get_workout_comments,
     tp_delete_workout,
     tp_update_workout,
     tp_create_workout,
@@ -23,6 +24,8 @@ from tp_mcp.tools.peaks import tp_get_peaks, tp_get_workout_prs
 from tp_mcp.tools.workout_types import tp_get_workout_types
 from tp_mcp.tools.atp import tp_get_atp
 from tp_mcp.tools.weekly_summary import tp_get_weekly_summary
+from tp_mcp.tools.events import tp_get_focus_event, tp_get_next_event
+from tp_mcp.tools.settings import tp_get_athlete_settings
 
 
 def _get_client():
@@ -388,6 +391,59 @@ TOOLS = [
             "required": [],
         },
     },
+    {
+        "name": "tp_get_workout_comments",
+        "description": (
+            "Comentários trocados num treino — incluindo feedback do COACH HUMANO (assessoria Spadotto) e do próprio atleta. "
+            "Use ao avaliar um treino para incorporar o que o coach real falou — alinha sua análise com a orientação da assessoria "
+            "em vez de contradizê-la. Ex: se o Spadotto comentou 'segura a intensidade essa semana', respeite isso."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "workout_id": {"type": "string", "description": "ID do treino"},
+            },
+            "required": ["workout_id"],
+        },
+    },
+    {
+        "name": "tp_get_focus_event",
+        "description": (
+            "A prova-ALVO principal (prioridade A) do atleta: nome, data, distância, metas e resultados. "
+            "É o norte de toda periodização — use para calcular semanas restantes e calibrar se a carga atual faz sentido "
+            "rumo à prova. Chame quando o atleta perguntar sobre a prova, ou no início de planejamento de bloco/semana."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "tp_get_next_event",
+        "description": (
+            "A próxima prova/evento futuro mais próximo no calendário (qualquer prioridade). "
+            "Use para countdown ('faltam X dias') e para saber se há prova chegando que exige taper ou ajuste de carga."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "tp_get_athlete_settings",
+        "description": (
+            "Configurações OFICIAIS do atleta no TP: FTP, limiar de FC, pace limiar, CSS, e todas as zonas "
+            "(potência, FC, pace) calculadas. FONTE DA VERDADE para zonas — use quando precisar dos valores exatos "
+            "ou quando suspeitar que o FTP/limiar mudou. Mais confiável que os números fixos do prompt."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
 ]
 
 
@@ -422,6 +478,14 @@ async def _run_tool(name: str, inputs: dict) -> dict:
             return await tp_get_weekly_summary(inputs.get("week_of"))
         elif name == "tp_get_workout_types":
             return await tp_get_workout_types()
+        elif name == "tp_get_workout_comments":
+            return await tp_get_workout_comments(inputs["workout_id"])
+        elif name == "tp_get_focus_event":
+            return await tp_get_focus_event()
+        elif name == "tp_get_next_event":
+            return await tp_get_next_event()
+        elif name == "tp_get_athlete_settings":
+            return await tp_get_athlete_settings()
         else:
             return {"error": f"Ferramenta desconhecida: {name}"}
     except Exception as e:
