@@ -12,11 +12,13 @@ def _now_brt() -> str:
 
 from tp_mcp.tools.workouts import (
     tp_get_workouts,
+    tp_get_workout,
     tp_delete_workout,
     tp_update_workout,
     tp_create_workout,
 )
 from tp_mcp.tools.fitness import tp_get_fitness
+from tp_mcp.tools.analyze import tp_analyze_workout
 
 
 def _get_client():
@@ -95,11 +97,22 @@ TOM DE COACH (vale para os dois modos)
 
 CONTEXTO DO ATLETA — FONTE ÚNICA DA VERDADE:
 - O bloco CONTEXTO ATUAL abaixo contém TODOS os dados do dia.
-- Para avaliação técnica detalhada de um treino concluído, use tp_get_workouts
-  com o id que está no contexto — ele traz descrição, blocos, FC, potência.
-- Se faltar dado realizado (Garmin não sincronizou), diga explicitamente:
-  "sem os dados realizados sincronizados não consigo avaliar a execução
-  com precisão — sincroniza o relógio e me chama de novo."
+- O contexto traz APENAS resumo: TSS, duração, distância. NÃO traz potência média,
+  FC média, NP, IF, dados por intervalo.
+
+WORKFLOW DE AVALIAÇÃO TÉCNICA — OBRIGATÓRIO seguir:
+1. Pega o id do treino concluído no contexto (já está lá em [id:...]).
+2. Chama tp_get_workout(id) → traz avg_power, normalized_power, avg_hr,
+   if_actual, elevation_gain. Esses são os dados REAIS para o "Plano vs Real".
+3. Se a pergunta envolve bloco/intervalo específico (ex: "potência do bloco
+   principal", "como foi cada tiro"), chama tp_analyze_workout(id) → traz
+   laps com média por bloco.
+4. NUNCA diga "não consegui carregar a potência" sem antes ter chamado
+   tp_get_workout(id). O contexto resumido não tem essa info — você precisa
+   buscar via tool. Se a tool retornar avg_power null aí sim diga que falta dado.
+5. Se o id não estiver no contexto (ex: treino de outra data), busca primeiro
+   via tp_get_workouts(start,end) e depois tp_get_workout(id).
+
 - Se um treino está marcado como ✓ concluído, trate como concluído.
 
 AÇÕES NO TRAININGPEAKS:
@@ -257,6 +270,39 @@ TOOLS = [
             "required": [],
         },
     },
+    {
+        "name": "tp_get_workout",
+        "description": (
+            "Busca DETALHES COMPLETOS de um treino específico — incluindo dados realizados de execução: "
+            "avg_power, normalized_power, avg_hr, avg_cadence, if_actual, calories, elevation_gain. "
+            "USE SEMPRE para avaliar execução de treino concluído — tp_get_workouts (lista) não retorna esses campos. "
+            "Workflow para avaliação: 1) pega id do contexto ou via tp_get_workouts, 2) chama tp_get_workout(id) pra ver potência/FC reais."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "workout_id": {"type": "string", "description": "ID do treino"},
+            },
+            "required": ["workout_id"],
+        },
+    },
+    {
+        "name": "tp_analyze_workout",
+        "description": (
+            "Análise PROFUNDA de um treino: totais, canais de dados (power/HR/pace por tempo), "
+            "LAPS (cada bloco/intervalo com duração e média de potência/FC), e tempo em zonas. "
+            "Use quando precisar avaliar bloco a bloco — ex: 'qual a potência média do bloco principal', "
+            "'como foi a degradação dos tiros', 'FC drift entre primeiro e último intervalo'. "
+            "Mais caro que tp_get_workout — use só quando precisar do detalhe por lap."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "workout_id": {"type": "string", "description": "ID do treino"},
+            },
+            "required": ["workout_id"],
+        },
+    },
 ]
 
 
@@ -273,6 +319,10 @@ async def _run_tool(name: str, inputs: dict) -> dict:
             return await tp_create_workout(**inputs)
         elif name == "tp_get_fitness":
             return await tp_get_fitness()
+        elif name == "tp_get_workout":
+            return await tp_get_workout(inputs["workout_id"])
+        elif name == "tp_analyze_workout":
+            return await tp_analyze_workout(inputs["workout_id"])
         else:
             return {"error": f"Ferramenta desconhecida: {name}"}
     except Exception as e:
