@@ -19,6 +19,10 @@ from tp_mcp.tools.workouts import (
 )
 from tp_mcp.tools.fitness import tp_get_fitness
 from tp_mcp.tools.analyze import tp_analyze_workout
+from tp_mcp.tools.peaks import tp_get_peaks, tp_get_workout_prs
+from tp_mcp.tools.workout_types import tp_get_workout_types
+from tp_mcp.tools.atp import tp_get_atp
+from tp_mcp.tools.weekly_summary import tp_get_weekly_summary
 
 
 def _get_client():
@@ -303,6 +307,87 @@ TOOLS = [
             "required": ["workout_id"],
         },
     },
+    {
+        "name": "tp_get_workout_prs",
+        "description": (
+            "Retorna PRs (personal records) batidos DURANTE um treino específico. "
+            "Use após avaliar execução de treino — se houve PR (ex: melhor potência de 5min, melhor 1km), "
+            "o coach parabeniza com base concreta. Não chame especulativamente — só quando o treino foi forte "
+            "(potência alta, pace forte) e vale checar se rendeu PR."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "workout_id": {"type": "string", "description": "ID do treino"},
+            },
+            "required": ["workout_id"],
+        },
+    },
+    {
+        "name": "tp_get_peaks",
+        "description": (
+            "Best efforts HISTÓRICOS do atleta para comparar com execução atual. "
+            "sport: 'Bike' ou 'Run'. "
+            "pr_type bike: power5sec, power1min, power5min, power10min, power20min, power60min, power90min, "
+            "hR5sec/1min/5min/10min/20min/60min/90min. "
+            "pr_type run: speed400Meter, speed800Meter, speed1K, speed1Mi, speed5K, speed5Mi, speed10K, "
+            "speed10Mi, speedHalfMarathon, speedMarathon, hR5sec/1min/5min/10min/20min/60min/90min. "
+            "Use para contextualizar: 'seu best 20min é 245W, hoje você fez 220W (10% abaixo)'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sport":   {"type": "string", "enum": ["Bike", "Run"], "description": "Esporte"},
+                "pr_type": {"type": "string", "description": "Tipo de PR — ver descrição"},
+                "days":    {"type": "integer", "description": "Janela de histórico em dias (default 3650 = all-time)"},
+            },
+            "required": ["sport", "pr_type"],
+        },
+    },
+    {
+        "name": "tp_get_atp",
+        "description": (
+            "ANNUAL TRAINING PLAN do atleta: TSS semanal alvo, fase atual (base 1/2, build 1/2, peak, taper, race, recovery), "
+            "provas. ESSENCIAL para periodização — diz em qual fase do macrociclo o atleta está e quanto TSS a semana deve ter. "
+            "Use no início de uma avaliação semanal ou quando o atleta perguntar 'estou no caminho certo pra prova?'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string", "description": "Data inicial YYYY-MM-DD"},
+                "end_date":   {"type": "string", "description": "Data final YYYY-MM-DD"},
+            },
+            "required": ["start_date", "end_date"],
+        },
+    },
+    {
+        "name": "tp_get_weekly_summary",
+        "description": (
+            "VISÃO CONSOLIDADA de uma semana: workouts + métricas saúde + fitness (CTL/ATL/TSB) num único retorno. "
+            "Use quando o atleta pedir 'resumo da semana' ou 'fechamento semanal' — 1 chamada substitui 3. "
+            "week_of opcional (qualquer dia da semana desejada — default: semana corrente)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "week_of": {"type": "string", "description": "Qualquer dia YYYY-MM-DD da semana desejada (opcional)"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "tp_get_workout_types",
+        "description": (
+            "Lista oficial de sport types e subtypes do TP com seus IDs. "
+            "Use APENAS quando precisar criar um treino com subtype específico (ex: 'Mountain Bike' em vez de 'Bike' genérico) "
+            "e não souber o ID exato. Em 95% dos casos não é necessária — Swim/Bike/Run cobre."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
 ]
 
 
@@ -323,6 +408,20 @@ async def _run_tool(name: str, inputs: dict) -> dict:
             return await tp_get_workout(inputs["workout_id"])
         elif name == "tp_analyze_workout":
             return await tp_analyze_workout(inputs["workout_id"])
+        elif name == "tp_get_workout_prs":
+            return await tp_get_workout_prs(inputs["workout_id"])
+        elif name == "tp_get_peaks":
+            return await tp_get_peaks(
+                sport=inputs["sport"],
+                pr_type=inputs["pr_type"],
+                days=inputs.get("days", 3650),
+            )
+        elif name == "tp_get_atp":
+            return await tp_get_atp(inputs["start_date"], inputs["end_date"])
+        elif name == "tp_get_weekly_summary":
+            return await tp_get_weekly_summary(inputs.get("week_of"))
+        elif name == "tp_get_workout_types":
+            return await tp_get_workout_types()
         else:
             return {"error": f"Ferramenta desconhecida: {name}"}
     except Exception as e:
