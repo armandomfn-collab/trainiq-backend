@@ -620,6 +620,32 @@ def _format_context(ctx: dict) -> str:
     return "\n".join(lines)
 
 
+import re as _re
+
+def _strip_markdown(text: str) -> str:
+    """Rede de segurança: remove markdown que a tela do app não renderiza.
+
+    O modelo às vezes insiste em **negrito**/`código`/# títulos mesmo com a
+    instrução de não usar. Aqui garantimos texto limpo no cliente.
+    """
+    if not text:
+        return text
+    # Remove ênfase: **bold**, *italic*, __bold__, _italic_ (preserva o conteúdo)
+    text = _re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+    text = _re.sub(r"\*([^*]+)\*", r"\1", text)
+    text = _re.sub(r"__([^_]+)__", r"\1", text)
+    # Crases / code spans
+    text = text.replace("`", "")
+    # Qualquer asterisco solto remanescente
+    text = text.replace("*", "")
+    # Cabeçalhos markdown e citações no início de linha (#, ##, >)
+    text = _re.sub(r"(?m)^\s{0,3}#{1,6}\s*", "", text)
+    text = _re.sub(r"(?m)^\s{0,3}>\s?", "", text)
+    # Bullets markdown "- " ou "+ " no início de linha → "· "
+    text = _re.sub(r"(?m)^(\s*)[-+]\s+", r"\1· ", text)
+    return text.strip()
+
+
 # ─── Loop agêntico ─────────────────────────────────────────────────────────────
 async def chat_with_coach(messages: list[dict], context: dict | None = None) -> str:
     """
@@ -650,7 +676,7 @@ async def chat_with_coach(messages: list[dict], context: dict | None = None) -> 
         # Resposta final — sem tool calls
         if response.stop_reason == "end_turn":
             texts = [b.text for b in response.content if hasattr(b, "text")]
-            return texts[0].strip() if texts else "Feito."
+            return _strip_markdown(texts[0]) if texts else "Feito."
 
         # Tem tool calls — executa e continua
         if response.stop_reason == "tool_use":
